@@ -1,0 +1,141 @@
+// Foreign Flow Detective — PostgreSQL (Supabase 호환)
+// 외국인 지분율 전용 데이터 모델
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 상장 종목 마스터
+model Stock {
+  code      String   @id @map("code") @db.VarChar(6)
+  name      String
+  market    String   @db.VarChar(20)
+  sector    String?  @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ownership   ForeignOwnershipDaily[]
+  rankings    RankingDaily[]
+  marketDaily StockMarketDaily[]
+  fundamentals StockFundamentalDaily[]
+  alerts      Alert[]
+  watchlist   Watchlist?
+
+  @@map("stocks")
+}
+
+/// 일별 외국인 지분 스냅샷 (pykrx 수집)
+model ForeignOwnershipDaily {
+  id              String   @id @default(cuid())
+  stockCode       String   @map("stock_code") @db.VarChar(6)
+  tradeDate       String   @map("trade_date") @db.VarChar(10)
+  foreignRatioPct Float    @map("foreign_ratio_pct")
+  foreignShares   BigInt?  @map("foreign_shares")
+  listedShares    BigInt?  @map("listed_shares")
+  source          String   @default("pykrx") @db.VarChar(30)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([stockCode, tradeDate])
+  @@index([stockCode, tradeDate])
+  @@map("foreign_ownership_daily")
+}
+
+/// 일별 기간 변화율 (ingest 시 사전 계산)
+model RankingDaily {
+  id        String   @id @default(cuid())
+  stockCode String   @map("stock_code") @db.VarChar(6)
+  tradeDate String   @map("trade_date") @db.VarChar(10)
+  change1d  Float    @default(0) @map("change_1d")
+  change10d Float    @map("change_10d")
+  change30d Float    @map("change_30d")
+  change60d Float    @map("change_60d")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([stockCode, tradeDate])
+  @@index([tradeDate, change1d])
+  @@index([tradeDate, change60d])
+  @@index([tradeDate, change30d])
+  @@index([tradeDate, change10d])
+  @@map("rankings_daily")
+}
+
+/// 일별 시세 (차트용: OHLCV + 등락률)
+model StockMarketDaily {
+  id         String   @id @default(cuid())
+  stockCode  String   @map("stock_code") @db.VarChar(6)
+  tradeDate  String   @map("trade_date") @db.VarChar(10)
+  openPrice  Float    @default(0) @map("open_price")
+  highPrice  Float    @default(0) @map("high_price")
+  lowPrice   Float    @default(0) @map("low_price")
+  closePrice Float    @map("close_price")
+  volume     BigInt   @map("volume")
+  changePct  Float    @default(0) @map("change_pct")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([stockCode, tradeDate])
+  @@index([stockCode, tradeDate])
+  @@map("stock_market_daily")
+}
+
+/// 일별 투자지표 (pykrx 시총·PER·PBR 등)
+model StockFundamentalDaily {
+  id           String   @id @default(cuid())
+  stockCode    String   @map("stock_code") @db.VarChar(6)
+  tradeDate    String   @map("trade_date") @db.VarChar(10)
+  marketCap    BigInt   @map("market_cap")
+  listedShares BigInt   @map("listed_shares")
+  tradingValue BigInt?  @map("trading_value")
+  per          Float?
+  pbr          Float?
+  eps          Float?
+  bps          Float?
+  divYield     Float?   @map("div_yield")
+  dps          Float?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([stockCode, tradeDate])
+  @@index([stockCode, tradeDate])
+  @@map("stock_fundamental_daily")
+}
+
+/// 알림 엔진 출력 (Priority 5)
+model Alert {
+  id        String   @id @default(cuid())
+  stockCode String   @map("stock_code") @db.VarChar(6)
+  alertType String   @map("alert_type") @db.VarChar(50)
+  message   String
+  tradeDate String   @map("trade_date") @db.VarChar(10)
+  severity  String   @default("info") @db.VarChar(20)
+  payload   Json?
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@index([stockCode, tradeDate])
+  @@index([createdAt])
+  @@index([alertType])
+  @@map("alerts")
+}
+
+/// 사용자 즐겨찾기 (관심 종목)
+model Watchlist {
+  stockCode String   @id @map("stock_code") @db.VarChar(6)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@map("watchlist")
+}

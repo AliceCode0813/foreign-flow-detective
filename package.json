@@ -1,0 +1,45 @@
+{
+  "name": "foreign-flow-detective",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
+    "ingest": "py scripts/ingest.py --market ALL",
+    "ingest:kospi": "py scripts/ingest.py --market KOSPI",
+    "ingest:kosdaq": "py scripts/ingest.py --market KOSDAQ",
+    "ingest:all": "py scripts/ingest.py --market ALL",
+    "ingest:resume": "py scripts/ingest.py --market ALL --only-missing --with-alerts",
+    "sync:stocks": "py scripts/sync_stocks.py --market ALL",
+    "backfill:rankings": "py scripts/backfill_rankings.py",
+    "backfill:market": "py scripts/backfill_market_ohlc.py",
+    "update:daily": "py scripts/daily_update.py",
+    "schedule:register": "powershell -ExecutionPolicy Bypass -File scripts/register_daily_task.ps1",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "lucide-react": "^1.17.0",
+    "next": "16.2.7",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "recharts": "^3.8.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.7",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
