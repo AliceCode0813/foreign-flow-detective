@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
 import { OwnershipSparkline } from "@/components/dashboard/OwnershipSparkline";
-import type { ConsecutiveInflowEntry } from "@/lib/types";
+import type { ConsecutiveInflowEntry, MarketFilter } from "@/lib/types";
 import { cn, changeColor, formatChange, formatRatio } from "@/lib/utils";
 
 export function ConsecutiveInflowPanel({
   entries,
   tradeDate,
+  market,
   marketLabel,
 }: {
   entries: ConsecutiveInflowEntry[];
   tradeDate: string | null;
+  market: MarketFilter;
   marketLabel: string;
 }) {
   return (
@@ -28,6 +31,10 @@ export function ConsecutiveInflowPanel({
           연속 유입 TOP 10
         </span>
       </CardTitle>
+
+      <div className="mb-4">
+        <MarketFilterLinks current={market} pathname="/" />
+      </div>
 
       {entries.length === 0 ? (
         <p className="py-6 text-center text-sm text-slate-500">

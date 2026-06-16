@@ -63,7 +63,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </section>
 
           <section className="mb-8">
-            <TopChangeRanking rankings={rankings} marketLabel={marketLabel} />
+            <TopChangeRanking rankings={rankings} market={market} marketLabel={marketLabel} />
           </section>
 
           <WatchlistSection stocks={watchlist} />
@@ -72,6 +72,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             <ConsecutiveInflowPanel
               entries={consecutiveInflow}
               tradeDate={tradeDate}
+              market={market}
               marketLabel={marketLabel}
             />
           </section>

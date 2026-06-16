@@ -18,3 +18,10 @@ export function marketWhereClause(market: MarketFilter) {
   if (market === "ALL") return {};
   return { market };
 }
+
+/** ?market= 쿼리 포함 경로 (ALL이면 market 파라미터 생략) */
+export function hrefWithMarket(pathname: string, market: MarketFilter): string {
+  if (market === "ALL") return pathname;
+  const sep = pathname.includes("?") ? "&" : "?";
+  return `${pathname}${sep}market=${market}`;
+}

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
-import type { RankingEntry, RankingPeriod } from "@/lib/types";
+import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
+import type { MarketFilter, RankingEntry, RankingPeriod } from "@/lib/types";
 import { cn, formatChange, formatRatio, changeColor } from "@/lib/utils";
 
 const TABS: { key: RankingPeriod; label: string }[] = [
@@ -16,11 +17,13 @@ const TABS: { key: RankingPeriod; label: string }[] = [
 
 interface TopChangeRankingProps {
   rankings: Record<RankingPeriod, { entries: RankingEntry[]; tradeDate: string | null }>;
+  market: MarketFilter;
   marketLabel?: string;
 }
 
 export function TopChangeRanking({
   rankings,
+  market,
   marketLabel = "전체",
 }: TopChangeRankingProps) {
   const [period, setPeriod] = useState<RankingPeriod>("10d");
@@ -42,7 +45,9 @@ export function TopChangeRanking({
         </span>
       </CardTitle>
 
-      <div className="mb-4 flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <MarketFilterLinks current={market} pathname="/" />
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
         {TABS.map((tab) => (
           <button
             key={tab.key}
@@ -58,6 +63,7 @@ export function TopChangeRanking({
             {tab.label}
           </button>
         ))}
+        </div>
       </div>
 
       {entries.length === 0 ? (
