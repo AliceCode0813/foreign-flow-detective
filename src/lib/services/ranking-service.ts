@@ -12,32 +12,40 @@ const PERIOD_FIELD: Record<
   "60d": "change60d",
 };
 
+async function getConsensusTradeDate(): Promise<string | null> {
+  const rows = await prisma.$queryRaw<{ trade_date: string }[]>`
+    SELECT trade_date
+    FROM foreign_ownership_daily
+    GROUP BY trade_date
+    ORDER BY COUNT(*) DESC, trade_date DESC
+    LIMIT 1
+  `;
+  return rows[0]?.trade_date ?? null;
+}
+
 export async function getRankings(
   period: RankingPeriod = "60d",
   limit = 10,
   market: MarketFilter = "ALL",
 ): Promise<{ entries: RankingEntry[]; tradeDate: string | null }> {
   try {
-    const latest = await prisma.rankingDaily.findFirst({
-      orderBy: { tradeDate: "desc" },
-      select: { tradeDate: true },
-    });
+    const latestDate = await getConsensusTradeDate();
 
-    if (!latest) {
+    if (!latestDate) {
       return { entries: [], tradeDate: null };
     }
 
     const field = PERIOD_FIELD[period];
     const rows = await prisma.rankingDaily.findMany({
       where: {
-        tradeDate: latest.tradeDate,
+        tradeDate: latestDate,
         stock: marketWhereClause(market),
       },
       include: {
         stock: {
           include: {
             ownership: {
-              where: { tradeDate: latest.tradeDate },
+              where: { tradeDate: latestDate },
               take: 1,
             },
           },
@@ -66,7 +74,7 @@ export async function getRankings(
       tradeDate: item.tradeDate,
     }));
 
-    return { entries, tradeDate: latest.tradeDate };
+    return { entries, tradeDate: latestDate };
   } catch (error) {
     console.error("[ranking-service]", error);
     return { entries: [], tradeDate: null };

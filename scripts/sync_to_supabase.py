@@ -107,25 +107,44 @@ def find_codes_to_sync(local, remote, latest: str) -> list[str]:
     return sorted(local_codes - remote_codes)
 
 
+def find_codes_with_table_gap(local, remote, table: str) -> list[str]:
+    """로컬 행 수가 Supabase보다 많은 종목 코드."""
+    with local.cursor() as lc, remote.cursor() as rc:
+        lc.execute(
+            sql.SQL("SELECT stock_code, COUNT(*) FROM {} GROUP BY stock_code").format(
+                sql.Identifier(table)
+            )
+        )
+        local_counts = dict(lc.fetchall())
+        rc.execute(
+            sql.SQL("SELECT stock_code, COUNT(*) FROM {} GROUP BY stock_code").format(
+                sql.Identifier(table)
+            )
+        )
+        remote_counts = dict(rc.fetchall())
+
+    return sorted(
+        code for code, count in local_counts.items() if count > remote_counts.get(code, 0)
+    )
+
+
 def upsert_table_for_codes(src, dst, spec: dict, codes: list[str] | None) -> int:
     table = spec["name"]
     conflict = spec["conflict"]
     update_cols = spec["update"]
 
     with src.cursor() as sc:
-        if codes and table != "stocks":
-            code_col = "code" if table == "stocks" else "stock_code"
-            sc.execute(
-                sql.SQL("SELECT * FROM {} WHERE {} = ANY(%s) ORDER BY 1").format(
-                    sql.Identifier(table),
-                    sql.Identifier(code_col),
-                ),
-                (codes,),
-            )
-        elif codes and table == "stocks":
+        if codes and table == "stocks":
             sc.execute(
                 sql.SQL("SELECT * FROM {} WHERE code = ANY(%s) ORDER BY code").format(
                     sql.Identifier(table)
+                ),
+                (codes,),
+            )
+        elif codes and table != "stocks":
+            sc.execute(
+                sql.SQL("SELECT * FROM {} WHERE stock_code = ANY(%s) ORDER BY 1").format(
+                    sql.Identifier(table),
                 ),
                 (codes,),
             )
@@ -138,18 +157,71 @@ def upsert_table_for_codes(src, dst, spec: dict, codes: list[str] | None) -> int
     if not rows:
         return 0
 
+    if codes and table != "stocks":
+        with dst.cursor() as dc:
+            dc.execute(
+                sql.SQL("DELETE FROM {} WHERE stock_code = ANY(%s)").format(
+                    sql.Identifier(table)
+                ),
+                (codes,),
+            )
+        dst.commit()
+    elif codes and table == "stocks":
+        with dst.cursor() as dc:
+            dc.execute(
+                sql.SQL("DELETE FROM {} WHERE code = ANY(%s)").format(sql.Identifier(table)),
+                (codes,),
+            )
+        dst.commit()
+
+    col_list = sql.SQL(", ").join(sql.Identifier(c) for c in cols)
+    insert_head = sql.SQL("INSERT INTO {} ({}) VALUES %s").format(
+        sql.Identifier(table),
+        col_list,
+    )
+
+    total = 0
+    with dst.cursor() as dc:
+        for i in range(0, len(rows), BATCH):
+            chunk = rows[i : i + BATCH]
+            execute_values(
+                dc,
+                insert_head.as_string(dst),
+                chunk,
+                page_size=BATCH,
+            )
+            total += len(chunk)
+            dst.commit()
+            print(f"    {table}: {total:,}/{len(rows):,}", flush=True)
+
+    return total
+
+
+def upsert_table_full(src, dst, spec: dict) -> int:
+    """전체 테이블 UPSERT (--full)."""
+    table = spec["name"]
+    conflict = spec["conflict"]
+    update_cols = spec["update"]
+
+    with src.cursor() as sc:
+        sc.execute(sql.SQL("SELECT * FROM {} ORDER BY 1").format(sql.Identifier(table)))
+        cols = [d[0] for d in sc.description]
+        rows = sc.fetchall()
+
+    if not rows:
+        return 0
+
     col_list = sql.SQL(", ").join(sql.Identifier(c) for c in cols)
     conflict_sql = sql.SQL(", ").join(sql.Identifier(c) for c in conflict)
-    placeholders = sql.SQL(", ").join(sql.Placeholder() * len(cols))
 
     if update_cols:
         set_sql = sql.SQL(", ").join(
             sql.SQL("{} = EXCLUDED.{}").format(sql.Identifier(c), sql.Identifier(c))
             for c in update_cols
         )
-        on_conflict = sql.SQL(
-            " ON CONFLICT ({}) DO UPDATE SET {}"
-        ).format(conflict_sql, set_sql)
+        on_conflict = sql.SQL(" ON CONFLICT ({}) DO UPDATE SET {}").format(
+            conflict_sql, set_sql
+        )
     else:
         on_conflict = sql.SQL(" ON CONFLICT ({}) DO NOTHING").format(conflict_sql)
 
@@ -199,21 +271,30 @@ def main() -> int:
     dst = connect(remote_url)
 
     codes: list[str] | None = None
+    repair_tables: set[str] | None = None
     if args.only_new_stocks and not args.full:
         with src.cursor() as cur:
             cur.execute("SELECT MAX(trade_date) FROM foreign_ownership_daily")
             latest = cur.fetchone()[0]
         codes = find_codes_to_sync(src, dst, latest)
-        print(f"[sync] 신규/누락 종목 {len(codes)}개 → {latest}", flush=True)
-        if not codes:
-            print("[sync] 동기화할 종목 없음", flush=True)
-            return 0
+        if codes:
+            print(f"[sync] 신규/누락 종목 {len(codes)}개 → {latest}", flush=True)
+        else:
+            codes = find_codes_with_table_gap(src, dst, "stock_market_daily")
+            if codes:
+                repair_tables = {"stock_market_daily", "stock_fundamental_daily"}
+                print(f"[sync] 시세 gap 보완 {len(codes)}종목", flush=True)
+            else:
+                print("[sync] 동기화할 종목 없음", flush=True)
+                return 0
 
     print("[sync] UPSERT 시작", flush=True)
     total = 0
     try:
         for spec in TABLES:
-            if args.only_new_stocks and not args.full and spec["name"] not in {
+            if repair_tables and spec["name"] not in repair_tables:
+                continue
+            if args.only_new_stocks and not args.full and not repair_tables and spec["name"] not in {
                 "stocks",
                 "foreign_ownership_daily",
                 "rankings_daily",
@@ -222,14 +303,17 @@ def main() -> int:
             }:
                 continue
             print(f"  {spec['name']}...", flush=True)
-            n = upsert_table_for_codes(src, dst, spec, None if args.full else codes)
+            if args.full:
+                n = upsert_table_full(src, dst, spec)
+            else:
+                n = upsert_table_for_codes(src, dst, spec, codes)
             print(f"  {spec['name']}: {n:,} rows", flush=True)
             total += n
     finally:
         src.close()
         dst.close()
 
-    print(f"[sync] 완료 — {total:,} rows", flush=True)
+    print(f"[sync] 완료 - {total:,} rows", flush=True)
     return 0
 
 

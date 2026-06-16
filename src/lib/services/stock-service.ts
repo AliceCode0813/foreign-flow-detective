@@ -62,11 +62,14 @@ function mapSummary(
 
 async function fetchLatestTradeDate(): Promise<string | null> {
   return safeQuery(async () => {
-    const row = await prisma.foreignOwnershipDaily.findFirst({
-      orderBy: { tradeDate: "desc" },
-      select: { tradeDate: true },
-    });
-    return row?.tradeDate ?? null;
+    const rows = await prisma.$queryRaw<{ trade_date: string; count: bigint }[]>`
+      SELECT trade_date, COUNT(*)::bigint AS count
+      FROM foreign_ownership_daily
+      GROUP BY trade_date
+      ORDER BY count DESC, trade_date DESC
+      LIMIT 1
+    `;
+    return rows[0]?.trade_date ?? null;
   }, null);
 }
 
