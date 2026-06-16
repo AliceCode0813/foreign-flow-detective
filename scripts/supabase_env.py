@@ -60,6 +60,15 @@ def write_database_url(url: str) -> None:
     ENV_PATH.write_text(text, encoding="utf-8")
 
 
+def build_bulk_sync_url(password: str) -> str:
+    """대량 UPSERT용 — transaction pooler (세션 슬롯 절약)."""
+    encoded = quote(password, safe="")
+    return (
+        f"postgresql://postgres.{SUPABASE_PROJECT_REF}:{encoded}"
+        f"@{SUPABASE_POOLER_HOST}:6543/postgres"
+    )
+
+
 def get_supabase_url() -> str:
     env = read_env()
     password = env.get("SUPABASE_DB_PASSWORD", "").strip()

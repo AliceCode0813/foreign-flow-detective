@@ -17,7 +17,7 @@ from psycopg2.extras import execute_values
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from supabase_env import get_supabase_url, read_env  # noqa: E402
+from supabase_env import build_bulk_sync_url, read_env  # noqa: E402
 
 BATCH = 2_000
 
@@ -197,9 +197,44 @@ def upsert_table_for_codes(src, dst, spec: dict, codes: list[str] | None) -> int
     return total
 
 
+def replace_table_full(src, dst, table: str) -> int:
+    """UNIQUE 제약 없는 테이블 — 전량 교체."""
+    with src.cursor() as sc:
+        sc.execute(sql.SQL("SELECT * FROM {} ORDER BY 1").format(sql.Identifier(table)))
+        cols = [d[0] for d in sc.description]
+        rows = sc.fetchall()
+
+    if not rows:
+        return 0
+
+    with dst.cursor() as dc:
+        dc.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(table)))
+    dst.commit()
+
+    col_list = sql.SQL(", ").join(sql.Identifier(c) for c in cols)
+    insert_head = sql.SQL("INSERT INTO {} ({}) VALUES %s").format(
+        sql.Identifier(table),
+        col_list,
+    )
+
+    total = 0
+    with dst.cursor() as dc:
+        for i in range(0, len(rows), BATCH):
+            chunk = rows[i : i + BATCH]
+            execute_values(dc, insert_head.as_string(dst), chunk, page_size=BATCH)
+            total += len(chunk)
+            dst.commit()
+            print(f"    {table}: {total:,}/{len(rows):,}", flush=True)
+
+    return total
+
+
 def upsert_table_full(src, dst, spec: dict) -> int:
     """전체 테이블 UPSERT (--full)."""
     table = spec["name"]
+    if table in ("stock_market_daily", "stock_fundamental_daily"):
+        return replace_table_full(src, dst, table)
+
     conflict = spec["conflict"]
     update_cols = spec["update"]
 
@@ -266,7 +301,7 @@ def main() -> int:
     if not local_url:
         raise RuntimeError("LOCAL_DATABASE_URL 필요")
 
-    remote_url = get_supabase_url()
+    remote_url = build_bulk_sync_url(env["SUPABASE_DB_PASSWORD"])
     src = connect(local_url)
     dst = connect(remote_url)
 
