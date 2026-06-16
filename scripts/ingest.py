@@ -49,9 +49,10 @@ load_env_file()
 
 
 def get_connection():
-    url = os.environ.get("DATABASE_URL")
+    """수집은 로컬 DB 우선 (이후 sync_to_supabase로 Supabase 반영)."""
+    url = os.environ.get("LOCAL_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL 환경변수가 필요합니다.")
+        raise RuntimeError("LOCAL_DATABASE_URL 또는 DATABASE_URL 환경변수가 필요합니다.")
     return psycopg2.connect(url)
 
 

@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { marketWhereClause } from "@/lib/market";
 import {
@@ -59,7 +60,7 @@ function mapSummary(
   };
 }
 
-export async function getLatestTradeDate(): Promise<string | null> {
+async function fetchLatestTradeDate(): Promise<string | null> {
   return safeQuery(async () => {
     const row = await prisma.foreignOwnershipDaily.findFirst({
       orderBy: { tradeDate: "desc" },
@@ -68,6 +69,12 @@ export async function getLatestTradeDate(): Promise<string | null> {
     return row?.tradeDate ?? null;
   }, null);
 }
+
+export const getLatestTradeDate = unstable_cache(
+  fetchLatestTradeDate,
+  ["latest-trade-date"],
+  { revalidate: 300 },
+);
 
 export async function listStocks(
   market: MarketFilter = "ALL",
@@ -143,8 +150,41 @@ export async function getTopMovers(
   market: MarketFilter = "ALL",
   limit = 9,
 ): Promise<StockSummary[]> {
-  const stocks = await listStocks(market);
-  return [...stocks].sort((a, b) => b.change10d - a.change10d).slice(0, limit);
+  return safeQuery(async () => {
+    const latestTradeDate = await getLatestTradeDate();
+    if (!latestTradeDate) return [];
+
+    const rows = await prisma.rankingDaily.findMany({
+      where: {
+        tradeDate: latestTradeDate,
+        stock: marketWhereClause(market),
+      },
+      include: {
+        stock: {
+          include: {
+            ownership: { where: { tradeDate: latestTradeDate }, take: 1 },
+          },
+        },
+      },
+      orderBy: { change10d: "desc" },
+      take: limit,
+    });
+
+    return rows
+      .filter((r) => r.stock.ownership.length > 0)
+      .map((r) => ({
+        code: r.stockCode,
+        name: r.stock.name,
+        market: r.stock.market,
+        sector: r.stock.sector,
+        currentRatio: r.stock.ownership[0].foreignRatioPct,
+        change1d: r.change1d ?? 0,
+        change10d: r.change10d ?? 0,
+        change30d: r.change30d ?? 0,
+        change60d: r.change60d ?? 0,
+        lastTradeDate: latestTradeDate,
+      }));
+  }, []);
 }
 
 export async function getStockDetail(code: string): Promise<StockDetail | null> {
@@ -334,15 +374,36 @@ export async function getDashboardStats(
 ): Promise<DashboardStats> {
   return safeQuery(
     async () => {
-      const stocks = await listStocks(market);
       const latestTradeDate = await getLatestTradeDate();
 
-      const [kospiCount, kosdaqCount] = await Promise.all([
+      const [kospiCount, kosdaqCount, trackedCount, avgAgg] = await Promise.all([
         prisma.stock.count({ where: { market: "KOSPI" } }),
         prisma.stock.count({ where: { market: "KOSDAQ" } }),
+        latestTradeDate
+          ? prisma.rankingDaily.count({
+              where: {
+                tradeDate: latestTradeDate,
+                stock: marketWhereClause(market),
+              },
+            })
+          : Promise.resolve(0),
+        latestTradeDate
+          ? prisma.rankingDaily.aggregate({
+              where: {
+                tradeDate: latestTradeDate,
+                stock: marketWhereClause(market),
+              },
+              _avg: {
+                change1d: true,
+                change10d: true,
+                change30d: true,
+                change60d: true,
+              },
+            })
+          : Promise.resolve(null),
       ]);
 
-      if (stocks.length === 0) {
+      if (!latestTradeDate || trackedCount === 0) {
         return {
           trackedCount: 0,
           kospiCount,
@@ -356,25 +417,18 @@ export async function getDashboardStats(
         };
       }
 
-      const n = stocks.length;
-      const sum = (
-        key: keyof Pick<
-          StockSummary,
-          "change1d" | "change10d" | "change30d" | "change60d"
-        >,
-      ) => stocks.reduce((acc, s) => acc + s[key], 0) / n;
+      const round = (v: number | null | undefined) =>
+        Math.round((v ?? 0) * 100) / 100;
 
       return {
-        trackedCount: n,
+        trackedCount,
         kospiCount,
         kosdaqCount,
-        avgChange1d: Math.round(sum("change1d") * 100) / 100,
-        avgChange10d: Math.round(sum("change10d") * 100) / 100,
-        avgChange30d: Math.round(sum("change30d") * 100) / 100,
-        avgChange60d: Math.round(sum("change60d") * 100) / 100,
-        lastUpdated: latestTradeDate
-          ? `${latestTradeDate} (KRX/pykrx)`
-          : "데이터 없음",
+        avgChange1d: round(avgAgg?._avg.change1d),
+        avgChange10d: round(avgAgg?._avg.change10d),
+        avgChange30d: round(avgAgg?._avg.change30d),
+        avgChange60d: round(avgAgg?._avg.change60d),
+        lastUpdated: `${latestTradeDate} (KRX/pykrx)`,
         hasData: true,
       };
     },

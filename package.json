@@ -15,12 +15,16 @@
     "ingest:kospi": "py scripts/ingest.py --market KOSPI",
     "ingest:kosdaq": "py scripts/ingest.py --market KOSDAQ",
     "ingest:all": "py scripts/ingest.py --market ALL",
+    "ingest:missing": "py scripts/ingest.py --market KOSPI --only-missing --days 120",
     "ingest:resume": "py scripts/ingest.py --market ALL --only-missing --with-alerts",
     "sync:stocks": "py scripts/sync_stocks.py --market ALL",
+    "sync:supabase": "py scripts/sync_to_supabase.py --only-new-stocks",
+    "sync:supabase:full": "py scripts/sync_to_supabase.py --full",
     "backfill:rankings": "py scripts/backfill_rankings.py",
     "backfill:market": "py scripts/backfill_market_ohlc.py",
     "update:daily": "py scripts/daily_update.py",
-    "schedule:register": "powershell -ExecutionPolicy Bypass -File scripts/register_daily_task.ps1",
+    "migrate:supabase": "py scripts/migrate_to_supabase.py",
+    "setup:supabase": "py scripts/setup_supabase.py",
     "postinstall": "prisma generate"
   },
   "dependencies": {

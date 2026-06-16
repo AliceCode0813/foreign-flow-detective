@@ -12,13 +12,20 @@ export async function GET(request: NextRequest) {
     getDashboardStats(market),
   ]);
 
-  return NextResponse.json({
-    stocks,
-    meta: {
-      market,
-      count: stocks.length,
-      lastUpdated: stats.lastUpdated,
-      hasData: stats.hasData,
+  return NextResponse.json(
+    {
+      stocks,
+      meta: {
+        market,
+        count: stocks.length,
+        lastUpdated: stats.lastUpdated,
+        hasData: stats.hasData,
+      },
     },
-  });
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    },
+  );
 }

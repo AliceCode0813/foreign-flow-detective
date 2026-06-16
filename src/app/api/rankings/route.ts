@@ -20,5 +20,12 @@ export async function GET(request: NextRequest) {
   const limit = Number.isFinite(limitParam) ? Math.min(limitParam, 50) : 10;
   const { entries, tradeDate } = await getRankings(period, limit, market);
 
-  return NextResponse.json({ period, market, tradeDate, entries });
+  return NextResponse.json(
+    { period, market, tradeDate, entries },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      },
+    },
+  );
 }

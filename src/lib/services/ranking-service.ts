@@ -43,19 +43,18 @@ export async function getRankings(
           },
         },
       },
+      orderBy: { [field]: "desc" },
+      take: limit,
     });
 
-    const sorted = rows
-      .map((row) => ({
-        code: row.stockCode,
-        name: row.stock.name,
-        market: row.stock.market,
-        currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
-        change: row[field] ?? 0,
-        tradeDate: row.tradeDate,
-      }))
-      .sort((a, b) => b.change - a.change)
-      .slice(0, limit);
+    const sorted = rows.map((row) => ({
+      code: row.stockCode,
+      name: row.stock.name,
+      market: row.stock.market,
+      currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
+      change: row[field] ?? 0,
+      tradeDate: row.tradeDate,
+    }));
 
     const entries: RankingEntry[] = sorted.map((item, i) => ({
       rank: i + 1,

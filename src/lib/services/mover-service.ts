@@ -18,6 +18,20 @@ type RecentMarket = {
 };
 
 const HISTORY_DAYS = 60;
+/** 쿼리·응답 절약용 캘린더 버퍼 (거래일 60 + 여유) */
+const HISTORY_CALENDAR_BUFFER = 95;
+const DEFAULT_SPARKLINE_TOP = 120;
+
+export interface GetOwnershipMoversOptions {
+  /** ratioHistory60d 를 포함할 상위 종목 수 (0 = 전부 제외) */
+  sparklineTop?: number;
+}
+
+function subtractCalendarDays(dateStr: string, days: number): string {
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
 
 function groupRecentByCode<T extends { stockCode: string }>(
   rows: T[],
@@ -151,9 +165,13 @@ function buildMoverRow(
 
 export async function getOwnershipMovers(
   market: MarketFilter = "ALL",
+  options: GetOwnershipMoversOptions = {},
 ): Promise<OwnershipMoverRow[]> {
   const tradeDate = await getLatestTradeDate();
   if (!tradeDate) return [];
+
+  const sparklineTop = options.sparklineTop ?? DEFAULT_SPARKLINE_TOP;
+  const historySince = subtractCalendarDays(tradeDate, HISTORY_CALENDAR_BUFFER);
 
   try {
     const rankings = await prisma.rankingDaily.findMany({
@@ -170,7 +188,10 @@ export async function getOwnershipMovers(
 
     const [ownershipRows, marketRows] = await Promise.all([
       prisma.foreignOwnershipDaily.findMany({
-        where: { stockCode: { in: codes } },
+        where: {
+          stockCode: { in: codes },
+          tradeDate: { gte: historySince, lte: tradeDate },
+        },
         orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
         select: {
           stockCode: true,
@@ -181,7 +202,10 @@ export async function getOwnershipMovers(
         },
       }),
       prisma.stockMarketDaily.findMany({
-        where: { stockCode: { in: codes } },
+        where: {
+          stockCode: { in: codes },
+          tradeDate: { gte: historySince, lte: tradeDate },
+        },
         orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
         select: {
           stockCode: true,
@@ -207,7 +231,20 @@ export async function getOwnershipMovers(
       if (built) movers.push(built);
     }
 
-    return movers;
+    if (sparklineTop <= 0) {
+      return movers.map((m) => ({ ...m, ratioHistory60d: [] }));
+    }
+
+    const sparklineCodes = new Set(
+      [...movers]
+        .sort((a, b) => b.absChange60d - a.absChange60d)
+        .slice(0, sparklineTop)
+        .map((m) => m.code),
+    );
+
+    return movers.map((m) =>
+      sparklineCodes.has(m.code) ? m : { ...m, ratioHistory60d: [] },
+    );
   } catch (error) {
     console.error("[mover-service]", error);
     return [];
