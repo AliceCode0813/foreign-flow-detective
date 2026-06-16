@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get("q") ?? "";
   const market = parseMarketFilter(request.nextUrl.searchParams.get("market"));
-  const stocks = await searchStocks(q, market, 50);
+  const limitParam = Number(request.nextUrl.searchParams.get("limit") ?? "50");
+  const limit = Number.isFinite(limitParam) ? Math.min(limitParam, 50) : 50;
+  const stocks = await searchStocks(q, market, limit);
 
   return NextResponse.json({ stocks, market, query: q });
 }

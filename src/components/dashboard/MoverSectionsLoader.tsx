@@ -6,9 +6,7 @@ import { DailyVolatilityPanel } from "@/components/dashboard/DailyVolatilityPane
 import { OwnershipMoversExplorer } from "@/components/dashboard/OwnershipMoversExplorer";
 import { CorrelationScatter } from "@/components/dashboard/CorrelationScatter";
 import { SectorHeatmap } from "@/components/dashboard/SectorHeatmap";
-import { ConsecutiveInflowPanel } from "@/components/dashboard/ConsecutiveInflowPanel";
 import {
-  buildConsecutiveInflowTop,
   buildCorrelationPoints,
   buildSectorHeatmap,
 } from "@/lib/mover-sort";
@@ -79,7 +77,6 @@ export function MoverSectionsLoader({
 
   const correlationPoints = useMemo(() => buildCorrelationPoints(movers), [movers]);
   const sectorCells = useMemo(() => buildSectorHeatmap(movers, market), [movers, market]);
-  const consecutiveInflow = useMemo(() => buildConsecutiveInflowTop(movers, 10), [movers]);
 
   if (loading) {
     return (
@@ -112,14 +109,6 @@ export function MoverSectionsLoader({
       <section className="mb-8">
         <DailyVolatilityPanel
           movers={dailyMovers}
-          tradeDate={tradeDate}
-          marketLabel={marketLabel}
-        />
-      </section>
-
-      <section className="mb-8">
-        <ConsecutiveInflowPanel
-          entries={consecutiveInflow}
           tradeDate={tradeDate}
           marketLabel={marketLabel}
         />

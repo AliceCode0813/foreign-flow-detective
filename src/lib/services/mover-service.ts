@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { inferOwnershipChange } from "@/lib/inference";
 import { marketWhereClause } from "@/lib/market";
-import type { MarketFilter, OwnershipMoverRow } from "@/lib/types";
+import type { ConsecutiveInflowEntry, MarketFilter, OwnershipMoverRow } from "@/lib/types";
 import { getLatestTradeDate } from "./stock-service";
 
 type RecentOwnership = {
@@ -260,4 +260,100 @@ export async function getDailyVolatilityTop(
     .filter((m) => m.absChange1d > 0)
     .sort((a, b) => b.absChange1d - a.absChange1d)
     .slice(0, limit);
+}
+
+const EMPTY_INFERENCE = {
+  tags: [] as string[],
+  summary: "",
+  method: "rule" as const,
+};
+
+/** 연속 유입 TOP N — ownership 이력만 조회 (시장·전체 movers 미전송) */
+export async function getConsecutiveInflowTop(
+  market: MarketFilter = "ALL",
+  limit = 10,
+  minStreak = 3,
+): Promise<ConsecutiveInflowEntry[]> {
+  const tradeDate = await getLatestTradeDate();
+  if (!tradeDate) return [];
+
+  const historySince = subtractCalendarDays(tradeDate, HISTORY_CALENDAR_BUFFER);
+
+  try {
+    const rankings = await prisma.rankingDaily.findMany({
+      where: {
+        tradeDate,
+        stock: marketWhereClause(market),
+      },
+      include: { stock: true },
+    });
+
+    if (rankings.length === 0) return [];
+
+    const codes = rankings.map((r) => r.stockCode);
+    const ownershipRows = await prisma.foreignOwnershipDaily.findMany({
+      where: {
+        stockCode: { in: codes },
+        tradeDate: { gte: historySince, lte: tradeDate },
+      },
+      orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+      select: {
+        stockCode: true,
+        tradeDate: true,
+        foreignRatioPct: true,
+        foreignShares: true,
+        listedShares: true,
+      },
+    });
+
+    const ownershipByCode = groupRecentByCode(ownershipRows, HISTORY_DAYS);
+
+    const candidates: ConsecutiveInflowEntry[] = [];
+    for (const row of rankings) {
+      const ownership = ownershipByCode.get(row.stockCode) ?? [];
+      if (ownership.length === 0) continue;
+
+      const ratioHistory60d = buildRatioHistory60d(ownership);
+      const consecutiveUpDays = countConsecutiveUpDays(ratioHistory60d);
+      if (consecutiveUpDays < minStreak) continue;
+
+      const latestOwn = ownership[0];
+      const change1d = row.change1d ?? 0;
+      const change60d = row.change60d ?? 0;
+
+      candidates.push({
+        code: row.stock.code,
+        name: row.stock.name,
+        market: row.stock.market,
+        sector: row.stock.sector,
+        currentRatio: latestOwn.foreignRatioPct,
+        change1d,
+        change10d: row.change10d ?? 0,
+        change30d: row.change30d ?? 0,
+        change60d,
+        lastTradeDate: tradeDate,
+        absChange1d: Math.abs(change1d),
+        absChange60d: Math.abs(change60d),
+        marketCap: 0,
+        closePrice: 0,
+        priceChange1d: 0,
+        priceChange60d: 0,
+        volume: 0,
+        ratioHistory60d,
+        consecutiveUpDays,
+        inference: EMPTY_INFERENCE,
+        streakDays: consecutiveUpDays,
+      });
+    }
+
+    return candidates
+      .sort(
+        (a, b) =>
+          b.consecutiveUpDays - a.consecutiveUpDays || b.change60d - a.change60d,
+      )
+      .slice(0, limit);
+  } catch (error) {
+    console.error("[mover-service] getConsecutiveInflowTop", error);
+    return [];
+  }
 }
