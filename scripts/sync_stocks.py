@@ -41,9 +41,9 @@ load_env_file()
 
 
 def get_connection():
-    url = os.environ.get("DATABASE_URL")
+    url = os.environ.get("LOCAL_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL 필요")
+        raise RuntimeError("LOCAL_DATABASE_URL 또는 DATABASE_URL 필요")
     return psycopg2.connect(url)
 
 
