@@ -46,7 +46,7 @@ DATABASE_URL="postgresql://postgres:password@localhost:5432/foreign_flow_detecti
 ### 2. DB 스키마 적용
 
 ```powershell
-cd C:\Users\겜잘알\foreign-flow-detective
+cd C:\dev\foreign-flow-detective
 npm install
 npm run db:push
 ```
@@ -84,7 +84,7 @@ http://localhost:3000
 ### 1. GitHub 저장소
 
 ```powershell
-cd C:\Users\겜잘알\foreign-flow-detective
+cd C:\dev\foreign-flow-detective
 git add .
 git commit -m "Initial commit"
 git branch -M main

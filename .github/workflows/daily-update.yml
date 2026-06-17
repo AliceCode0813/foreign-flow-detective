@@ -1,0 +1,67 @@
+# 평일 20:30 KST — 종목 동기화 + KRX 수집 (Supabase 직접 반영)
+#
+# GitHub Secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_PASSWORD  — Supabase DB 비밀번호
+#   KRX_ID                — (선택) pykrx용
+#   KRX_PW                — (선택) pykrx용
+
+name: Daily data update
+
+on:
+  schedule:
+    # 20:30 KST = 11:30 UTC, 월~금
+    - cron: "30 11 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-data-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Configure DATABASE_URL (Supabase session pooler)
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python <<'PY'
+          import os
+          from urllib.parse import quote
+
+          password = os.environ.get("SUPABASE_DB_PASSWORD", "").strip()
+          if not password:
+              raise SystemExit("SUPABASE_DB_PASSWORD secret이 없습니다.")
+
+          encoded = quote(password, safe="")
+          ref = "pcdhshflarandsdwuddb"
+          host = "aws-1-ap-northeast-2.pooler.supabase.com"
+          url = (
+              f"postgresql://postgres.{ref}:{encoded}@{host}:5432/postgres"
+              "?options=-c%20statement_timeout%3D0"
+          )
+
+          github_env = os.environ["GITHUB_ENV"]
+          with open(github_env, "a", encoding="utf-8") as f:
+              f.write(f"DATABASE_URL={url}\n")
+              f.write("REMOTE_ONLY=1\n")
+          PY
+
+      - name: Run daily update (remote)
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: python scripts/daily_update.py --remote-only

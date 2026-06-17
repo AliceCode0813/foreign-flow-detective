@@ -1,5 +1,5 @@
 """
-하루 1회 자동 업데이트 — 종목 마스터 동기화 + 최근 지분/시세 수집
+하루 1회 자동 업데이트 — 종목 동기화 + 지분/시세 수집 + Supabase 반영
 
 장 마감(15:30) 이후 KRX 데이터 반영을 위해 저녁 시간대 실행을 권장합니다.
 Windows 작업 스케줄러: scripts/register_daily_task.ps1
@@ -7,6 +7,7 @@ Windows 작업 스케줄러: scripts/register_daily_task.ps1
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -20,9 +21,17 @@ def run(cmd: list[str]) -> int:
     return subprocess.call(cmd, cwd=ROOT)
 
 
+def is_remote_only() -> bool:
+    if "--remote-only" in sys.argv:
+        return True
+    return os.environ.get("REMOTE_ONLY", "").lower() in ("1", "true", "yes")
+
+
 def main() -> int:
     started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[daily_update] 시작 {started}")
+    remote = is_remote_only()
+    mode = "remote(Supabase 직접)" if remote else "local+sync"
+    print(f"[daily_update] 시작 {started} ({mode})")
 
     steps: list[list[str]] = [
         [sys.executable, "scripts/sync_stocks.py", "--market", "ALL"],
@@ -38,6 +47,8 @@ def main() -> int:
             "0.25",
         ],
     ]
+    if not remote:
+        steps.append([sys.executable, "scripts/sync_to_supabase.py", "--full"])
 
     for cmd in steps:
         code = run(cmd)
