@@ -34,6 +34,7 @@ def main() -> int:
     print(f"[daily_update] 시작 {started} ({mode})")
 
     steps: list[list[str]] = [
+        [sys.executable, "scripts/ensure_schema.py"],
         [sys.executable, "scripts/sync_stocks.py", "--market", "ALL"],
         [
             sys.executable,

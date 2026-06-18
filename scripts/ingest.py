@@ -181,9 +181,16 @@ def fetch_fundamental_rows(code: str, start: str, end: str) -> list[dict[str, An
     from pykrx import stock
 
     cap_df = stock.get_market_cap_by_date(start, end, code)
-    fund_df = stock.get_market_fundamental_by_date(start, end, code)
     if cap_df is None or cap_df.empty:
         return []
+
+    fund_df = None
+    try:
+        fund_df = stock.get_market_fundamental_by_date(start, end, code)
+        if fund_df is not None and fund_df.empty:
+            fund_df = None
+    except Exception:
+        fund_df = None
 
     cap_col = parse_column(cap_df, ["시가총액", "market_cap"])
     listed_col = parse_column(cap_df, ["상장주식수", "listed_shares"])
