@@ -409,19 +409,21 @@ def ingest_one(
     start_str: str,
     end_str: str,
     with_alerts: bool,
+    skip_fundamentals: bool = False,
 ) -> tuple[int, int, bool]:
     """단일 종목 수집. (지분건수, 시세건수, 성공여부)"""
     upsert_stock(cur, code, name, market)
     own_rows = fetch_foreign_rows(code, start_str, end_str)
     mkt_rows = fetch_market_rows(code, start_str, end_str)
-    fund_rows = fetch_fundamental_rows(code, start_str, end_str)
 
     if not own_rows:
         return 0, 0, False
 
     own_n = upsert_ownership(cur, code, own_rows)
     mkt_n = upsert_market(cur, code, mkt_rows)
-    upsert_fundamentals(cur, code, fund_rows)
+    if not skip_fundamentals:
+        fund_rows = fetch_fundamental_rows(code, start_str, end_str)
+        upsert_fundamentals(cur, code, fund_rows)
     compute_rankings(cur, code)
 
     if with_alerts:
@@ -492,6 +494,11 @@ def main():
         action="store_true",
         help="지분 데이터 없는 종목만 수집 (이어하기)",
     )
+    parser.add_argument(
+        "--skip-fundamentals",
+        action="store_true",
+        help="PER/PBR 등 투자지표 수집 생략 (일일 갱신용)",
+    )
     args = parser.parse_args()
 
     if not os.environ.get("KRX_ID") or not os.environ.get("KRX_PW"):
@@ -520,7 +527,14 @@ def main():
                 for i, (code, name, market) in enumerate(universe, 1):
                     try:
                         own_n, mkt_n, success = ingest_one(
-                            cur, code, name, market, start_str, end_str, args.with_alerts
+                            cur,
+                            code,
+                            name,
+                            market,
+                            start_str,
+                            end_str,
+                            args.with_alerts,
+                            args.skip_fundamentals,
                         )
                         if success:
                             ok += 1

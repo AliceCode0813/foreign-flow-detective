@@ -27,29 +27,47 @@ def is_remote_only() -> bool:
     return os.environ.get("REMOTE_ONLY", "").lower() in ("1", "true", "yes")
 
 
+def parse_args() -> tuple[bool, str | None]:
+    remote = is_remote_only()
+    market: str | None = None
+    argv = sys.argv[1:]
+    if "--remote-only" in argv:
+        argv = [a for a in argv if a != "--remote-only"]
+    for i, arg in enumerate(argv):
+        if arg == "--market" and i + 1 < len(argv):
+            market = argv[i + 1]
+            break
+    return remote, market
+
+
 def main() -> int:
     started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    remote = is_remote_only()
+    remote, market = parse_args()
     mode = "remote(Supabase 직접)" if remote else "local+sync"
     print(f"[daily_update] 시작 {started} ({mode})")
 
+    ingest_market = market or "ALL"
     ingest_days = "5" if remote else "14"
-    print(f"[daily_update] ingest --days {ingest_days}")
+    print(f"[daily_update] ingest --market {ingest_market} --days {ingest_days}")
+
+    ingest_cmd = [
+        sys.executable,
+        "scripts/ingest.py",
+        "--market",
+        ingest_market,
+        "--days",
+        ingest_days,
+        "--with-alerts",
+        "--delay",
+        "0.25",
+    ]
+    if remote:
+        ingest_cmd.append("--skip-fundamentals")
 
     steps: list[list[str]] = [
         [sys.executable, "scripts/ensure_schema.py"],
         [sys.executable, "scripts/sync_stocks.py", "--market", "ALL"],
-        [
-            sys.executable,
-            "scripts/ingest.py",
-            "--market",
-            "ALL",
-            "--days",
-            ingest_days,
-            "--with-alerts",
-            "--delay",
-            "0.25",
-        ],
+        ingest_cmd,
     ]
     if not remote:
         steps.append([sys.executable, "scripts/sync_to_supabase.py", "--full"])
