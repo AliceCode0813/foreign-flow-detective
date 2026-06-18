@@ -33,6 +33,9 @@ def main() -> int:
     mode = "remote(Supabase 직접)" if remote else "local+sync"
     print(f"[daily_update] 시작 {started} ({mode})")
 
+    ingest_days = "5" if remote else "14"
+    print(f"[daily_update] ingest --days {ingest_days}")
+
     steps: list[list[str]] = [
         [sys.executable, "scripts/ensure_schema.py"],
         [sys.executable, "scripts/sync_stocks.py", "--market", "ALL"],
@@ -42,7 +45,7 @@ def main() -> int:
             "--market",
             "ALL",
             "--days",
-            "14",
+            ingest_days,
             "--with-alerts",
             "--delay",
             "0.25",
