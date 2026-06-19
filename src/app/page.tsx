@@ -2,10 +2,11 @@ import { AppShell } from "@/components/layout/AppShell";
 import { StockSearch } from "@/components/dashboard/StockSearch";
 import { TopChangeRanking } from "@/components/dashboard/TopChangeRanking";
 import { MarketFilterTabs } from "@/components/dashboard/MarketFilterTabs";
-import { ConsecutiveStreakLoader } from "@/components/dashboard/ConsecutiveStreakLoader";
+import { ConsecutiveStreakSection } from "@/components/dashboard/ConsecutiveStreakSection";
 import { WatchlistSection } from "@/components/dashboard/WatchlistSection";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { parseMarketFilter } from "@/lib/market";
+import { marketFilterLabel, parseMarketFilter } from "@/lib/market";
+import { getConsecutiveStreakTops } from "@/lib/services/mover-service";
 import { getAllPeriodRankings } from "@/lib/services/ranking-service";
 import { getDashboardStats } from "@/lib/services/stock-service";
 import { getWatchlistStocks } from "@/lib/services/watchlist-service";
@@ -14,21 +15,29 @@ import { Suspense } from "react";
 export const revalidate = 300;
 
 interface DashboardPageProps {
-  searchParams: Promise<{ market?: string }>;
+  searchParams: Promise<{
+    market?: string;
+    rankMarket?: string;
+    streakMarket?: string;
+  }>;
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
   const params = await searchParams;
   const market = parseMarketFilter(params.market);
+  const rankMarket = parseMarketFilter(params.rankMarket);
+  const streakMarket = parseMarketFilter(params.streakMarket);
 
-  const [stats, rankings, watchlist] = await Promise.all([
+  const [stats, rankings, watchlist, streaks] = await Promise.all([
     getDashboardStats(market),
-    getAllPeriodRankings(15, market),
+    getAllPeriodRankings(15, rankMarket),
     getWatchlistStocks(),
+    getConsecutiveStreakTops(streakMarket, 10),
   ]);
 
-  const marketLabel =
-    market === "KOSPI" ? "코스피" : market === "KOSDAQ" ? "코스닥" : "전체";
+  const marketLabel = marketFilterLabel(market);
+  const rankMarketLabel = marketFilterLabel(rankMarket);
+  const streakMarketLabel = marketFilterLabel(streakMarket);
 
   return (
     <AppShell hasData={stats.hasData}>
@@ -60,13 +69,23 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </section>
 
           <section className="mb-8">
-            <TopChangeRanking rankings={rankings} market={market} marketLabel={marketLabel} />
+            <TopChangeRanking
+              rankings={rankings}
+              market={rankMarket}
+              marketLabel={rankMarketLabel}
+            />
           </section>
 
           <WatchlistSection stocks={watchlist} />
 
           <section className="mb-8 mt-8">
-            <ConsecutiveStreakLoader market={market} marketLabel={marketLabel} />
+            <ConsecutiveStreakSection
+              inflow={streaks.inflow}
+              outflow={streaks.outflow}
+              tradeDate={streaks.tradeDate}
+              market={streakMarket}
+              marketLabel={streakMarketLabel}
+            />
           </section>
         </>
       )}

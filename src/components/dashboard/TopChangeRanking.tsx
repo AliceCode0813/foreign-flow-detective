@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
@@ -125,7 +125,9 @@ export function TopChangeRanking({
       </CardTitle>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <MarketFilterLinks current={market} pathname="/" />
+        <Suspense fallback={null}>
+          <MarketFilterLinks current={market} paramName="rankMarket" pathname="/" />
+        </Suspense>
         <div className="flex gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
           {TABS.map((tab) => (
             <button

@@ -19,9 +19,53 @@ export function marketWhereClause(market: MarketFilter) {
   return { market };
 }
 
+export function marketFilterLabel(market: MarketFilter): string {
+  if (market === "KOSPI") return "코스피";
+  if (market === "KOSDAQ") return "코스닥";
+  return "전체";
+}
+
+type SearchParamsInput =
+  | string
+  | URLSearchParams
+  | { toString(): string; get?: (name: string) => string | null }
+  | Record<string, string | string[] | undefined>;
+
+function toURLSearchParams(input: SearchParamsInput): URLSearchParams {
+  if (typeof input === "string") return new URLSearchParams(input);
+  if (input instanceof URLSearchParams) return new URLSearchParams(input.toString());
+  if (typeof input.get === "function") return new URLSearchParams(input.toString());
+
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) {
+    if (value == null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, item);
+    } else {
+      params.set(key, value);
+    }
+  }
+  return params;
+}
+
+/** Named market query param — preserves other params (ALL omits the param). */
+export function hrefWithMarketParam(
+  pathname: string,
+  currentSearch: SearchParamsInput,
+  paramName: string,
+  market: MarketFilter,
+): string {
+  const params = toURLSearchParams(currentSearch);
+  if (market === "ALL") {
+    params.delete(paramName);
+  } else {
+    params.set(paramName, market);
+  }
+  const qs = params.toString();
+  return qs ? `${pathname}?${qs}` : pathname;
+}
+
 /** ?market= 쿼리 포함 경로 (ALL이면 market 파라미터 생략) */
 export function hrefWithMarket(pathname: string, market: MarketFilter): string {
-  if (market === "ALL") return pathname;
-  const sep = pathname.includes("?") ? "&" : "?";
-  return `${pathname}${sep}market=${market}`;
+  return hrefWithMarketParam(pathname, "", "market", market);
 }
