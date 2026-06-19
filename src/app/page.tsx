@@ -1,14 +1,20 @@
 import { AppShell } from "@/components/layout/AppShell";
 import { StockSearch } from "@/components/dashboard/StockSearch";
-import { TopChangeRanking } from "@/components/dashboard/TopChangeRanking";
 import { MarketFilterTabs } from "@/components/dashboard/MarketFilterTabs";
-import { ConsecutiveStreakSection } from "@/components/dashboard/ConsecutiveStreakSection";
 import { WatchlistSection } from "@/components/dashboard/WatchlistSection";
+import { Top10SnapshotSection } from "@/components/dashboard/Top10SnapshotSection";
+import {
+  DeferredRankingsFallback,
+  DeferredRankingsSection,
+} from "@/components/dashboard/DeferredRankingsSection";
+import {
+  DeferredStreakFallback,
+  DeferredStreakSection,
+} from "@/components/dashboard/DeferredStreakSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { marketFilterLabel, parseMarketFilter } from "@/lib/market";
-import { getConsecutiveStreakTops } from "@/lib/services/mover-service";
-import { getAllPeriodRankings } from "@/lib/services/ranking-service";
-import { getDashboardStats } from "@/lib/services/stock-service";
+import { getTop10Snapshot } from "@/lib/services/ranking-service";
+import { getMinimalDashboardMeta } from "@/lib/services/stock-service";
 import { getWatchlistStocks } from "@/lib/services/watchlist-service";
 import { Suspense } from "react";
 
@@ -28,26 +34,24 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const rankMarket = parseMarketFilter(params.rankMarket);
   const streakMarket = parseMarketFilter(params.streakMarket);
 
-  const [stats, rankings, watchlist, streaks] = await Promise.all([
-    getDashboardStats(market),
-    getAllPeriodRankings(15, rankMarket),
+  const [meta, top10, watchlist] = await Promise.all([
+    getMinimalDashboardMeta(),
+    getTop10Snapshot("60d", rankMarket),
     getWatchlistStocks(),
-    getConsecutiveStreakTops(streakMarket, 10),
   ]);
 
   const marketLabel = marketFilterLabel(market);
   const rankMarketLabel = marketFilterLabel(rankMarket);
-  const streakMarketLabel = marketFilterLabel(streakMarket);
 
   return (
-    <AppShell hasData={stats.hasData}>
+    <AppShell hasData={meta.hasData}>
       <section className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
           외국인 지분율 대시보드
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {marketLabel} · {stats.trackedCount.toLocaleString()}종목 ·{" "}
-          {stats.hasData ? stats.lastUpdated : "데이터 없음"}
+          {marketLabel} · {meta.trackedCount.toLocaleString()}종목 ·{" "}
+          {meta.hasData ? meta.lastUpdated : "데이터 없음"}
         </p>
       </section>
 
@@ -57,7 +61,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         </Suspense>
       </section>
 
-      {!stats.hasData ? (
+      {!meta.hasData ? (
         <EmptyState
           title="실데이터가 아직 없습니다"
           description="npm.cmd run ingest:all 로 전 종목 수집을 실행하세요."
@@ -65,27 +69,27 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       ) : (
         <>
           <section className="mb-8">
+            <WatchlistSection stocks={watchlist} />
+          </section>
+
+          <section className="mb-8">
+            <Top10SnapshotSection snapshot={top10} marketLabel={rankMarketLabel} />
+          </section>
+
+          <section className="mb-8">
             <StockSearch market={market} />
           </section>
 
           <section className="mb-8">
-            <TopChangeRanking
-              rankings={rankings}
-              market={rankMarket}
-              marketLabel={rankMarketLabel}
-            />
+            <Suspense fallback={<DeferredRankingsFallback />}>
+              <DeferredRankingsSection rankMarket={rankMarket} />
+            </Suspense>
           </section>
 
-          <WatchlistSection stocks={watchlist} />
-
-          <section className="mb-8 mt-8">
-            <ConsecutiveStreakSection
-              inflow={streaks.inflow}
-              outflow={streaks.outflow}
-              tradeDate={streaks.tradeDate}
-              market={streakMarket}
-              marketLabel={streakMarketLabel}
-            />
+          <section className="mb-8">
+            <Suspense fallback={<DeferredStreakFallback />}>
+              <DeferredStreakSection streakMarket={streakMarket} />
+            </Suspense>
           </section>
         </>
       )}

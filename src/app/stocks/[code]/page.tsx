@@ -5,6 +5,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ChangeRateCards } from "@/components/stock/ChangeRateCards";
 import { StockChartSection } from "@/components/stock/StockChartSection";
 import { StockInvestmentPanel } from "@/components/stock/StockInvestmentPanel";
+import { StockOverviewPanel } from "@/components/stock/StockOverviewPanel";
 import { FavoriteButton } from "@/components/stock/FavoriteButton";
 import { prisma } from "@/lib/db";
 import {
@@ -18,6 +19,7 @@ import { isWatchlisted } from "@/lib/services/watchlist-service";
 import {
   formatMarketCap,
   formatPercent,
+  formatPercentile,
   formatPrice,
   formatRatio,
   changeColor,
@@ -47,7 +49,7 @@ export default async function StockDetailPage({ params }: StockDetailPageProps) 
   const { code } = await params;
   const [stock, history, investment, watchlisted] = await Promise.all([
     getStockDetail(code),
-    getStockHistory(code, 120),
+    getStockHistory(code, 60),
     getStockInvestmentInfo(code),
     isWatchlisted(code),
   ]);
@@ -93,6 +95,11 @@ export default async function StockDetailPage({ params }: StockDetailPageProps) 
               </span>
             </p>
             <p className="mt-1 text-xs text-slate-400">기준일 {stock.lastTradeDate}</p>
+            {stock.foreignRatioPercentile != null && (
+              <p className="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">
+                지분율 백분위 {formatPercentile(stock.foreignRatioPercentile)}
+              </p>
+            )}
           </div>
           {stock.marketCap > 0 && (
             <div>
@@ -116,6 +123,8 @@ export default async function StockDetailPage({ params }: StockDetailPageProps) 
         </div>
       </header>
 
+      <StockOverviewPanel overview={stock.overview} stockName={stock.name} />
+
       <section className="mb-6">
         <ChangeRateCards changes={periodChanges} />
       </section>
@@ -123,6 +132,7 @@ export default async function StockDetailPage({ params }: StockDetailPageProps) 
       <section className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <StockChartSection
+            stockCode={stock.code}
             ownership={history.ownership}
             market={history.market}
             combined={combined}

@@ -19,13 +19,13 @@ type RecentMarket = {
 };
 
 const HISTORY_DAYS = 60;
-/** 쿼리·응답 절약용 캘린더 버퍼 (거래일 60 + 여유) */
 const HISTORY_CALENDAR_BUFFER = 95;
-const DEFAULT_SPARKLINE_TOP = 120;
+const DEFAULT_SPARKLINE_TOP = 80;
 
 export interface GetOwnershipMoversOptions {
-  /** ratioHistory60d 를 포함할 상위 종목 수 (0 = 전부 제외) */
   sparklineTop?: number;
+  /** 0 = 제한 없음 (기본: 전체 rankings) */
+  limit?: number;
 }
 
 function subtractCalendarDays(dateStr: string, days: number): string {
@@ -75,7 +75,6 @@ function calcVolumeRatio(market: RecentMarket[]): number {
   return avg > 0 ? latestVol / avg : 1;
 }
 
-/** 최근 N거래일 연속 지분 증가 일수 */
 export function countConsecutiveUpDays(historyAsc: number[]): number {
   if (historyAsc.length < 2) return 0;
   let count = 0;
@@ -100,13 +99,15 @@ function buildMoverRow(
   },
   ranking: {
     change1d: number;
-    change10d: number;
-    change30d: number;
+    change5d: number;
+    change20d: number;
     change60d: number;
+    foreignRatioPercentile: number | null;
   },
   ownership: RecentOwnership[],
   market: RecentMarket[],
   tradeDate: string,
+  ratioHistory60d: number[],
 ): OwnershipMoverRow | null {
   if (ownership.length === 0) return null;
 
@@ -132,7 +133,6 @@ function buildMoverRow(
 
   const change1d = ranking.change1d ?? 0;
   const change60d = ranking.change60d ?? 0;
-  const ratioHistory60d = buildRatioHistory60d(ownership);
 
   return {
     code: stock.code,
@@ -141,9 +141,10 @@ function buildMoverRow(
     sector: stock.sector,
     currentRatio: latestOwn.foreignRatioPct,
     change1d,
-    change10d: ranking.change10d ?? 0,
-    change30d: ranking.change30d ?? 0,
+    change5d: ranking.change5d ?? 0,
+    change20d: ranking.change20d ?? 0,
     change60d,
+    foreignRatioPercentile: ranking.foreignRatioPercentile,
     lastTradeDate: tradeDate,
     absChange1d: Math.abs(change1d),
     absChange60d: Math.abs(change60d),
@@ -172,7 +173,6 @@ export async function getOwnershipMovers(
   if (!tradeDate) return [];
 
   const sparklineTop = options.sparklineTop ?? DEFAULT_SPARKLINE_TOP;
-  const historySince = subtractCalendarDays(tradeDate, HISTORY_CALENDAR_BUFFER);
 
   try {
     const rankings = await prisma.rankingDaily.findMany({
@@ -180,20 +180,26 @@ export async function getOwnershipMovers(
         tradeDate,
         stock: marketWhereClause(market),
       },
-      include: { stock: true },
+      select: {
+        stockCode: true,
+        change1d: true,
+        change5d: true,
+        change20d: true,
+        change60d: true,
+        foreignRatioPercentile: true,
+        stock: {
+          select: { code: true, name: true, market: true, sector: true },
+        },
+      },
     });
 
     if (rankings.length === 0) return [];
 
     const codes = rankings.map((r) => r.stockCode);
 
-    const [ownershipRows, marketRows] = await Promise.all([
+    const [latestOwnership, latestMarket] = await Promise.all([
       prisma.foreignOwnershipDaily.findMany({
-        where: {
-          stockCode: { in: codes },
-          tradeDate: { gte: historySince, lte: tradeDate },
-        },
-        orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+        where: { stockCode: { in: codes }, tradeDate },
         select: {
           stockCode: true,
           tradeDate: true,
@@ -203,49 +209,107 @@ export async function getOwnershipMovers(
         },
       }),
       prisma.stockMarketDaily.findMany({
-        where: {
-          stockCode: { in: codes },
-          tradeDate: { gte: historySince, lte: tradeDate },
-        },
-        orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
-        select: {
-          stockCode: true,
-          tradeDate: true,
-          closePrice: true,
-          volume: true,
-        },
+        where: { stockCode: { in: codes }, tradeDate },
+        select: { stockCode: true, tradeDate: true, closePrice: true, volume: true },
       }),
     ]);
 
-    const ownershipByCode = groupRecentByCode(ownershipRows, HISTORY_DAYS);
-    const marketByCode = groupRecentByCode(marketRows, HISTORY_DAYS);
+    const prevDateRows = await prisma.foreignOwnershipDaily.findMany({
+      where: { stockCode: { in: codes }, tradeDate: { lt: tradeDate } },
+      orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+      distinct: ["stockCode"],
+      select: {
+        stockCode: true,
+        tradeDate: true,
+        foreignRatioPct: true,
+        foreignShares: true,
+        listedShares: true,
+      },
+    });
 
-    const movers: OwnershipMoverRow[] = [];
+    const prevMarketRows = await prisma.stockMarketDaily.findMany({
+      where: { stockCode: { in: codes }, tradeDate: { lt: tradeDate } },
+      orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+      distinct: ["stockCode"],
+      select: { stockCode: true, tradeDate: true, closePrice: true, volume: true },
+    });
+
+    const ownLatestMap = new Map(latestOwnership.map((r) => [r.stockCode, r]));
+    const mktLatestMap = new Map(latestMarket.map((r) => [r.stockCode, r]));
+    const ownPrevMap = new Map(prevDateRows.map((r) => [r.stockCode, r]));
+    const mktPrevMap = new Map(prevMarketRows.map((r) => [r.stockCode, r]));
+
+    const moversDraft: OwnershipMoverRow[] = [];
     for (const row of rankings) {
+      const latestOwn = ownLatestMap.get(row.stockCode);
+      if (!latestOwn) continue;
+      const prevOwn = ownPrevMap.get(row.stockCode);
+      const latestMkt = mktLatestMap.get(row.stockCode);
+      const prevMkt = mktPrevMap.get(row.stockCode);
+
+      const ownership: RecentOwnership[] = [latestOwn, ...(prevOwn ? [prevOwn] : [])];
+      const marketRows: RecentMarket[] = [
+        ...(latestMkt ? [latestMkt] : []),
+        ...(prevMkt ? [prevMkt] : []),
+      ];
+
       const built = buildMoverRow(
         row.stock,
         row,
-        ownershipByCode.get(row.stockCode) ?? [],
-        marketByCode.get(row.stockCode) ?? [],
+        ownership,
+        marketRows,
         tradeDate,
+        [],
       );
-      if (built) movers.push(built);
-    }
-
-    if (sparklineTop <= 0) {
-      return movers.map((m) => ({ ...m, ratioHistory60d: [] }));
+      if (built) moversDraft.push(built);
     }
 
     const sparklineCodes = new Set(
-      [...movers]
+      [...moversDraft]
         .sort((a, b) => b.absChange60d - a.absChange60d)
         .slice(0, sparklineTop)
         .map((m) => m.code),
     );
 
-    return movers.map((m) =>
-      sparklineCodes.has(m.code) ? m : { ...m, ratioHistory60d: [] },
-    );
+    let sparklineMap = new Map<string, number[]>();
+    if (sparklineCodes.size > 0) {
+      const historySince = subtractCalendarDays(tradeDate, HISTORY_CALENDAR_BUFFER);
+      const ownershipRows = await prisma.foreignOwnershipDaily.findMany({
+        where: {
+          stockCode: { in: [...sparklineCodes] },
+          tradeDate: { gte: historySince, lte: tradeDate },
+        },
+        orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+        select: { stockCode: true, foreignRatioPct: true },
+      });
+      const byCode = groupRecentByCode(
+        ownershipRows.map((r) => ({
+          stockCode: r.stockCode,
+          tradeDate,
+          foreignRatioPct: r.foreignRatioPct,
+          foreignShares: null,
+          listedShares: null,
+        })),
+        HISTORY_DAYS,
+      );
+      sparklineMap = new Map(
+        [...sparklineCodes].map((code) => [code, buildRatioHistory60d(byCode.get(code) ?? [])]),
+      );
+    }
+
+    const movers = moversDraft.map((m) => ({
+      ...m,
+      ratioHistory60d: sparklineMap.get(m.code) ?? [],
+      consecutiveUpDays: countConsecutiveUpDays(sparklineMap.get(m.code) ?? []),
+    }));
+
+    if (options.limit && options.limit > 0) {
+      return movers
+        .sort((a, b) => b.absChange60d - a.absChange60d)
+        .slice(0, options.limit);
+    }
+
+    return movers;
   } catch (error) {
     console.error("[mover-service]", error);
     return [];
@@ -256,7 +320,7 @@ export async function getDailyVolatilityTop(
   market: MarketFilter = "ALL",
   limit = 10,
 ): Promise<OwnershipMoverRow[]> {
-  const movers = await getOwnershipMovers(market);
+  const movers = await getOwnershipMovers(market, { sparklineTop: limit, limit: 500 });
   return movers
     .filter((m) => m.absChange1d > 0)
     .sort((a, b) => b.absChange1d - a.absChange1d)
@@ -269,7 +333,6 @@ const EMPTY_INFERENCE = {
   method: "rule" as const,
 };
 
-/** 연속 유입/유출 TOP N — ingest 시 저장한 streak 컬럼 조회 (경량) */
 export async function getConsecutiveStreakTops(
   market: MarketFilter = "ALL",
   limit = 10,
@@ -281,7 +344,7 @@ export async function getConsecutiveStreakTops(
 }> {
   return unstable_cache(
     () => fetchConsecutiveStreakTops(market, limit, minStreak),
-    ["consecutive-streak", market, String(limit), String(minStreak)],
+    ["consecutive-streak-v2", market, String(limit), String(minStreak)],
     { revalidate: 300 },
   )();
 }
@@ -302,6 +365,30 @@ async function fetchConsecutiveStreakTops(
 
   try {
     const marketFilter = marketWhereClause(market);
+    const rowSelect = {
+      stockCode: true,
+      change1d: true,
+      change5d: true,
+      change20d: true,
+      change60d: true,
+      foreignRatioPercentile: true,
+      consecutiveUpDays: true,
+      consecutiveDownDays: true,
+      stock: {
+        select: {
+          code: true,
+          name: true,
+          market: true,
+          sector: true,
+          ownership: {
+            where: { tradeDate },
+            take: 1,
+            select: { foreignRatioPct: true },
+          },
+        },
+      },
+    } as const;
+
     const [inflowRows, outflowRows] = await Promise.all([
       prisma.rankingDaily.findMany({
         where: {
@@ -311,13 +398,7 @@ async function fetchConsecutiveStreakTops(
         },
         orderBy: [{ consecutiveUpDays: "desc" }, { change60d: "desc" }],
         take: limit,
-        include: {
-          stock: {
-            include: {
-              ownership: { where: { tradeDate }, take: 1 },
-            },
-          },
-        },
+        select: rowSelect,
       }),
       prisma.rankingDaily.findMany({
         where: {
@@ -327,13 +408,7 @@ async function fetchConsecutiveStreakTops(
         },
         orderBy: [{ consecutiveDownDays: "desc" }, { change60d: "asc" }],
         take: limit,
-        include: {
-          stock: {
-            include: {
-              ownership: { where: { tradeDate }, take: 1 },
-            },
-          },
-        },
+        select: rowSelect,
       }),
     ]);
 
@@ -373,7 +448,7 @@ async function fetchSparklines(
   const byCode = groupRecentByCode(
     ownershipRows.map((r) => ({
       stockCode: r.stockCode,
-      tradeDate: tradeDate,
+      tradeDate,
       foreignRatioPct: r.foreignRatioPct,
       foreignShares: null,
       listedShares: null,
@@ -392,9 +467,10 @@ function toStreakEntry(
   row: {
     stockCode: string;
     change1d: number;
-    change10d: number;
-    change30d: number;
+    change5d: number;
+    change20d: number;
     change60d: number;
+    foreignRatioPercentile: number | null;
     stock: {
       code: string;
       name: string;
@@ -416,9 +492,10 @@ function toStreakEntry(
     sector: row.stock.sector,
     currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
     change1d,
-    change10d: row.change10d ?? 0,
-    change30d: row.change30d ?? 0,
+    change5d: row.change5d ?? 0,
+    change20d: row.change20d ?? 0,
     change60d,
+    foreignRatioPercentile: row.foreignRatioPercentile,
     lastTradeDate: tradeDate,
     absChange1d: Math.abs(change1d),
     absChange60d: Math.abs(change60d),
@@ -434,7 +511,6 @@ function toStreakEntry(
   };
 }
 
-/** @deprecated getConsecutiveStreakTops 사용 */
 export async function getConsecutiveInflowTop(
   market: MarketFilter = "ALL",
   limit = 10,

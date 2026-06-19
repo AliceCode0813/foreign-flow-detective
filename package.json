@@ -21,6 +21,8 @@
     "sync:supabase": "py scripts/sync_to_supabase.py --only-new-stocks",
     "sync:supabase:full": "py scripts/sync_to_supabase.py --full",
     "backfill:rankings": "py scripts/backfill_rankings.py",
+    "compute:snapshots": "py scripts/compute_snapshots.py",
+    "fetch:dart": "py scripts/fetch_dart_overview.py --missing-only --limit 100",
     "backfill:market": "py scripts/backfill_market_ohlc.py",
     "update:daily": "py scripts/daily_update.py",
     "migrate:supabase": "py scripts/migrate_to_supabase.py",

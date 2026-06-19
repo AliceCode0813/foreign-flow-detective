@@ -43,7 +43,7 @@ export function MoverSectionsLoader({
     setLoading(true);
     setError(null);
 
-    fetch(`/api/movers?market=${market}`)
+    fetch(`/api/movers?market=${market}&sparklineTop=80&limit=500`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();

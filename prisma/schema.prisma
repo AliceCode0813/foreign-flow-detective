@@ -12,11 +12,13 @@ datasource db {
 
 /// 상장 종목 마스터
 model Stock {
-  code      String   @id @map("code") @db.VarChar(6)
-  name      String
-  market    String   @db.VarChar(20)
-  sector    String?  @db.VarChar(100)
-  createdAt DateTime @default(now()) @map("created_at")
+  code         String   @id @map("code") @db.VarChar(6)
+  name         String
+  market       String   @db.VarChar(20)
+  sector       String?  @db.VarChar(100)
+  overview     String?  @db.Text
+  dartCorpCode String?  @map("dart_corp_code") @db.VarChar(8)
+  createdAt    DateTime @default(now()) @map("created_at")
 
   ownership   ForeignOwnershipDaily[]
   rankings    RankingDaily[]
@@ -24,6 +26,7 @@ model Stock {
   fundamentals StockFundamentalDaily[]
   alerts      Alert[]
   watchlist   Watchlist?
+  rankingSnapshots RankingSnapshotDaily[]
 
   @@map("stocks")
 }
@@ -48,27 +51,49 @@ model ForeignOwnershipDaily {
 
 /// 일별 기간 변화율 (ingest 시 사전 계산)
 model RankingDaily {
-  id        String   @id @default(cuid())
-  stockCode String   @map("stock_code") @db.VarChar(6)
-  tradeDate String   @map("trade_date") @db.VarChar(10)
-  change1d  Float    @default(0) @map("change_1d")
-  change10d Float    @map("change_10d")
-  change30d Float    @map("change_30d")
-  change60d Float    @map("change_60d")
-  consecutiveUpDays   Int      @default(0) @map("consecutive_up_days")
-  consecutiveDownDays Int      @default(0) @map("consecutive_down_days")
-  createdAt DateTime @default(now()) @map("created_at")
+  id                     String   @id @default(cuid())
+  stockCode              String   @map("stock_code") @db.VarChar(6)
+  tradeDate              String   @map("trade_date") @db.VarChar(10)
+  change1d               Float    @default(0) @map("change_1d")
+  change5d               Float    @default(0) @map("change_5d")
+  change20d              Float    @default(0) @map("change_20d")
+  change60d              Float    @map("change_60d")
+  foreignRatioPercentile Float?   @map("foreign_ratio_percentile")
+  consecutiveUpDays      Int      @default(0) @map("consecutive_up_days")
+  consecutiveDownDays    Int      @default(0) @map("consecutive_down_days")
+  createdAt              DateTime @default(now()) @map("created_at")
 
   stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
 
   @@unique([stockCode, tradeDate])
   @@index([tradeDate, change1d])
+  @@index([tradeDate, change5d])
+  @@index([tradeDate, change20d])
   @@index([tradeDate, change60d])
-  @@index([tradeDate, change30d])
-  @@index([tradeDate, change10d])
   @@index([tradeDate, consecutiveUpDays])
   @@index([tradeDate, consecutiveDownDays])
   @@map("rankings_daily")
+}
+
+/// ingest 시 사전 계산된 TOP10 랭킹 스냅샷 (웹 즉시 조회용)
+model RankingSnapshotDaily {
+  id                     String   @id @default(cuid())
+  tradeDate              String   @map("trade_date") @db.VarChar(10)
+  market                 String   @db.VarChar(20)
+  period                 String   @db.VarChar(4)
+  direction              String   @db.VarChar(6)
+  rank                   Int
+  stockCode              String   @map("stock_code") @db.VarChar(6)
+  change                 Float
+  currentRatio           Float    @map("current_ratio")
+  foreignRatioPercentile Float?   @map("foreign_ratio_percentile")
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([tradeDate, market, period, direction, rank])
+  @@index([tradeDate, market, period, direction])
+  @@map("rankings_snapshot_daily")
 }
 
 /// 일별 시세 (차트용: OHLCV + 등락률)

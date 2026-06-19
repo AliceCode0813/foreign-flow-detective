@@ -25,7 +25,7 @@ TABLES: list[dict] = [
     {
         "name": "stocks",
         "conflict": ["code"],
-        "update": ["name", "market", "sector"],
+        "update": ["name", "market", "sector", "overview", "dart_corp_code"],
     },
     {
         "name": "foreign_ownership_daily",
@@ -35,7 +35,15 @@ TABLES: list[dict] = [
     {
         "name": "rankings_daily",
         "conflict": ["stock_code", "trade_date"],
-        "update": ["change_1d", "change_10d", "change_30d", "change_60d"],
+        "update": [
+            "change_1d",
+            "change_5d",
+            "change_20d",
+            "change_60d",
+            "foreign_ratio_percentile",
+            "consecutive_up_days",
+            "consecutive_down_days",
+        ],
     },
     {
         "name": "stock_market_daily",
@@ -73,6 +81,11 @@ TABLES: list[dict] = [
         "name": "watchlist",
         "conflict": ["stock_code"],
         "update": [],
+    },
+    {
+        "name": "rankings_snapshot_daily",
+        "conflict": ["trade_date", "market", "period", "direction", "rank"],
+        "update": ["stock_code", "change", "current_ratio", "foreign_ratio_percentile"],
     },
 ]
 

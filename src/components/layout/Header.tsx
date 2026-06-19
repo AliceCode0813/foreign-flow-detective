@@ -32,7 +32,7 @@ export function Header({ hasData = false }: { hasData?: boolean }) {
                 : "rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:ring-amber-800"
             }
           >
-            {hasData ? "Live · KRX" : "No Data"}
+            {hasData ? "Live · DB" : "No Data"}
           </span>
         </nav>
       </div>

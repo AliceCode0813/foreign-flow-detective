@@ -43,11 +43,16 @@ export function formatVolume(value: string): string {
 
 export const PERIOD_LABELS: Record<RankingPeriod | "all", string> = {
   "1d": "1일",
-  "10d": "10일",
-  "30d": "30일",
+  "5d": "5일",
+  "20d": "20일",
   "60d": "60일",
   all: "전체",
 };
+
+export function formatPercentile(value: number | null | undefined): string {
+  if (value == null) return "-";
+  return `${value.toFixed(0)}백분위 (전 종목 대비)`;
+}
 
 export function changeColor(value: number): string {
   if (value > 0) return "text-emerald-600 dark:text-emerald-400";

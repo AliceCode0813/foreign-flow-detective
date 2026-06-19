@@ -406,13 +406,13 @@ def compute_rankings(cur, code: str):
     cur.execute(
         """
         INSERT INTO rankings_daily
-          (id, stock_code, trade_date, change_1d, change_10d, change_30d, change_60d,
+          (id, stock_code, trade_date, change_1d, change_5d, change_20d, change_60d,
            consecutive_up_days, consecutive_down_days, created_at)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (stock_code, trade_date) DO UPDATE SET
           change_1d = EXCLUDED.change_1d,
-          change_10d = EXCLUDED.change_10d,
-          change_30d = EXCLUDED.change_30d,
+          change_5d = EXCLUDED.change_5d,
+          change_20d = EXCLUDED.change_20d,
           change_60d = EXCLUDED.change_60d,
           consecutive_up_days = EXCLUDED.consecutive_up_days,
           consecutive_down_days = EXCLUDED.consecutive_down_days,
@@ -423,8 +423,8 @@ def compute_rankings(cur, code: str):
             code,
             latest_date,
             calc_change(ratios, 1),
-            calc_change(ratios, 10),
-            calc_change(ratios, 30),
+            calc_change(ratios, 5),
+            calc_change(ratios, 20),
             calc_change(ratios, 60),
             streak_up,
             streak_down,
@@ -530,6 +530,11 @@ def main():
         action="store_true",
         help="PER/PBR 등 투자지표 수집 생략 (일일 갱신용)",
     )
+    parser.add_argument(
+        "--skip-snapshots",
+        action="store_true",
+        help="ingest 후 백분위·TOP10 스냅샷 생략 (CI 병렬 ingest 시 finalize에서 실행)",
+    )
     args = parser.parse_args()
 
     if not os.environ.get("KRX_ID") or not os.environ.get("KRX_PW"):
@@ -592,6 +597,20 @@ def main():
         conn.close()
 
     print(f"\n[DONE] 성공 {ok}, 실패 {fail}, 지분 {total_own}건, 시세 {total_mkt}건", flush=True)
+
+    if ok > 0 and not args.skip_snapshots:
+        import subprocess
+
+        snap_script = ROOT / "scripts" / "compute_snapshots.py"
+        print("\n[SNAPSHOT] 백분위·TOP10 계산...", flush=True)
+        result = subprocess.run(
+            [sys.executable, str(snap_script)],
+            cwd=str(ROOT),
+            capture_output=False,
+        )
+        if result.returncode != 0:
+            print("[WARN] 스냅샷 계산 실패", file=sys.stderr)
+
     if fail > ok:
         sys.exit(1)
 

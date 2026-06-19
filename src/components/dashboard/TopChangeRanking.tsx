@@ -11,8 +11,8 @@ import { cn, formatChange, formatRatio, changeColor } from "@/lib/utils";
 
 const TABS: { key: RankingPeriod; label: string }[] = [
   { key: "1d", label: "1일" },
-  { key: "10d", label: "10일" },
-  { key: "30d", label: "30일" },
+  { key: "5d", label: "5일" },
+  { key: "20d", label: "20일" },
   { key: "60d", label: "60일" },
 ];
 
@@ -105,7 +105,7 @@ export function TopChangeRanking({
   market,
   marketLabel = "전체",
 }: TopChangeRankingProps) {
-  const [period, setPeriod] = useState<RankingPeriod>("10d");
+  const [period, setPeriod] = useState<RankingPeriod>("5d");
   const { top, bottom, tradeDate } = rankings[period];
   const periodLabel = TABS.find((t) => t.key === period)?.label ?? "";
 

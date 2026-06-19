@@ -6,11 +6,11 @@ import type { MarketFilter, RankingEntry, RankingPeriod } from "@/lib/types";
 
 const PERIOD_FIELD: Record<
   RankingPeriod,
-  "change1d" | "change10d" | "change30d" | "change60d"
+  "change1d" | "change5d" | "change20d" | "change60d"
 > = {
   "1d": "change1d",
-  "10d": "change10d",
-  "30d": "change30d",
+  "5d": "change5d",
+  "20d": "change20d",
   "60d": "change60d",
 };
 
@@ -22,7 +22,7 @@ export interface PeriodTopBottom {
 
 function mapRankingRows(
   rows: Awaited<ReturnType<typeof queryRankings>>,
-  field: "change1d" | "change10d" | "change30d" | "change60d",
+  field: "change1d" | "change5d" | "change20d" | "change60d",
 ): RankingEntry[] {
   return rows.map((row, i) => ({
     rank: i + 1,
@@ -31,6 +31,7 @@ function mapRankingRows(
     market: row.stock.market,
     currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
     change: row[field] ?? 0,
+    foreignRatioPercentile: row.foreignRatioPercentile ?? null,
     tradeDate: row.tradeDate,
   }));
 }
@@ -48,12 +49,22 @@ async function queryRankings(
       tradeDate: latestDate,
       stock: marketWhereClause(market),
     },
-    include: {
+    select: {
+      stockCode: true,
+      tradeDate: true,
+      change1d: true,
+      change5d: true,
+      change20d: true,
+      change60d: true,
+      foreignRatioPercentile: true,
       stock: {
-        include: {
+        select: {
+          name: true,
+          market: true,
           ownership: {
             where: { tradeDate: latestDate },
             take: 1,
+            select: { foreignRatioPct: true },
           },
         },
       },
@@ -82,6 +93,84 @@ async function fetchTopBottomForDate(
   };
 }
 
+/** 사전 계산된 TOP10 스냅샷 (빠른 대시보드 초기 로드) */
+export async function getTop10Snapshot(
+  period: RankingPeriod = "60d",
+  market: MarketFilter = "ALL",
+): Promise<PeriodTopBottom> {
+  return unstable_cache(
+    () => fetchTop10Snapshot(period, market),
+    ["top10-snapshot", period, market],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchTop10Snapshot(
+  period: RankingPeriod,
+  market: MarketFilter,
+): Promise<PeriodTopBottom> {
+  const latestDate = await getLatestTradeDate();
+  const empty: PeriodTopBottom = { top: [], bottom: [], tradeDate: null };
+  if (!latestDate) return empty;
+
+  try {
+    const [topRows, bottomRows] = await Promise.all([
+      prisma.rankingSnapshotDaily.findMany({
+        where: { tradeDate: latestDate, market, period, direction: "top" },
+        orderBy: { rank: "asc" },
+        take: 10,
+        select: {
+          rank: true,
+          stockCode: true,
+          change: true,
+          currentRatio: true,
+          foreignRatioPercentile: true,
+          tradeDate: true,
+          stock: { select: { name: true, market: true } },
+        },
+      }),
+      prisma.rankingSnapshotDaily.findMany({
+        where: { tradeDate: latestDate, market, period, direction: "bottom" },
+        orderBy: { rank: "asc" },
+        take: 10,
+        select: {
+          rank: true,
+          stockCode: true,
+          change: true,
+          currentRatio: true,
+          foreignRatioPercentile: true,
+          tradeDate: true,
+          stock: { select: { name: true, market: true } },
+        },
+      }),
+    ]);
+
+    if (topRows.length === 0) {
+      return fetchTopBottomForDate(latestDate, period, 10, market);
+    }
+
+    const mapRow = (row: (typeof topRows)[0]): RankingEntry => ({
+      rank: row.rank,
+      code: row.stockCode,
+      name: row.stock.name,
+      market: row.stock.market,
+      currentRatio: row.currentRatio,
+      change: row.change,
+      foreignRatioPercentile: row.foreignRatioPercentile,
+      tradeDate: row.tradeDate,
+    });
+
+    return {
+      top: topRows.map(mapRow),
+      bottom: bottomRows.map(mapRow),
+      tradeDate: latestDate,
+    };
+  } catch (error) {
+    console.error("[ranking-service] getTop10Snapshot", error);
+    return fetchTopBottomForDate(latestDate, period, 10, market);
+  }
+}
+
 export async function getRankings(
   period: RankingPeriod = "60d",
   limit = 10,
@@ -104,23 +193,23 @@ async function fetchAllPeriodRankings(limit: number, market: MarketFilter) {
   const latestDate = await getLatestTradeDate();
   const empty: PeriodTopBottom = { top: [], bottom: [], tradeDate: null };
   if (!latestDate) {
-    return { "1d": empty, "10d": empty, "30d": empty, "60d": empty };
+    return { "1d": empty, "5d": empty, "20d": empty, "60d": empty };
   }
 
-  const [r1, r10, r30, r60] = await Promise.all([
+  const [r1, r5, r20, r60] = await Promise.all([
     fetchTopBottomForDate(latestDate, "1d", limit, market),
-    fetchTopBottomForDate(latestDate, "10d", limit, market),
-    fetchTopBottomForDate(latestDate, "30d", limit, market),
+    fetchTopBottomForDate(latestDate, "5d", limit, market),
+    fetchTopBottomForDate(latestDate, "20d", limit, market),
     fetchTopBottomForDate(latestDate, "60d", limit, market),
   ]);
 
-  return { "1d": r1, "10d": r10, "30d": r30, "60d": r60 };
+  return { "1d": r1, "5d": r5, "20d": r20, "60d": r60 };
 }
 
 export async function getAllPeriodRankings(limit = 15, market: MarketFilter = "ALL") {
   return unstable_cache(
     () => fetchAllPeriodRankings(limit, market),
-    ["all-period-rankings-v2", String(limit), market],
+    ["all-period-rankings-v3", String(limit), market],
     { revalidate: 300 },
   )();
 }

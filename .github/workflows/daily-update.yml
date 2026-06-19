@@ -1,16 +1,29 @@
 # 평일 20:30 KST — 종목 동기화 + KRX 수집 (Supabase 직접 반영)
-# KOSPI / KOSDAQ 병렬 수집, PER/PBR 생략
+# KOSPI / KOSDAQ 병렬 수집, PER/PBR 생략, ingest 후 스냅샷·백분위 계산
 #
 # GitHub Secrets:
 #   SUPABASE_DB_PASSWORD, KRX_ID, KRX_PW
+#   DART_API_KEY (선택 — fetch_dart_overview weekly job)
+#
+# 스케줄 참고:
+#   GitHub Actions cron은 UTC 기준. `30 11 * * 1-5` = 월~금 11:30 UTC = 20:30 KST.
+#   공개 repo 무료 tier에서는 지연·스킵이 발생할 수 있어 21:30 KST 백업 cron 추가.
+#   첫 scheduled 성공이 목요일(2026-06-18)인 경우, 금요일 run은 repo/워크플로우
+#   default branch 반영 직후 또는 GitHub queue 지연으로 아직 없을 수 있음.
 
 name: Daily data update
 
 on:
   schedule:
-    # 20:30 KST = 11:30 UTC, 월~금
+    # 20:30 KST = 11:30 UTC, 월~금 (GitHub: 0=일, 1=월 … 5=금)
     - cron: "30 11 * * 1-5"
+    # 백업: 21:30 KST = 12:30 UTC (primary 실패·지연 대비)
+    - cron: "30 12 * * 1-5"
   workflow_dispatch:
+
+concurrency:
+  group: daily-data-update
+  cancel-in-progress: false
 
 jobs:
   prepare:
@@ -116,4 +129,101 @@ jobs:
             --market ${{ matrix.market }} \
             --days 5 \
             --delay 0.25 \
-            --skip-fundamentals
+            --skip-fundamentals \
+            --skip-snapshots
+
+  finalize:
+    needs: ingest
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Configure DATABASE_URL
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python <<'PY'
+          import os
+          from urllib.parse import quote
+
+          password = os.environ.get("SUPABASE_DB_PASSWORD", "").strip()
+          if not password:
+              raise SystemExit("SUPABASE_DB_PASSWORD secret이 없습니다.")
+
+          encoded = quote(password, safe="")
+          ref = "pcdhshflarandsdwuddb"
+          host = "aws-1-ap-northeast-2.pooler.supabase.com"
+          url = (
+              f"postgresql://postgres.{ref}:{encoded}@{host}:5432/postgres"
+              "?options=-c%20statement_timeout%3D0"
+          )
+
+          github_env = os.environ["GITHUB_ENV"]
+          with open(github_env, "a", encoding="utf-8") as f:
+              f.write(f"DATABASE_URL={url}\n")
+          PY
+
+      - name: Compute percentiles and TOP10 snapshots
+        run: python scripts/compute_snapshots.py
+
+  dart-overview:
+    needs: finalize
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Configure DATABASE_URL
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python <<'PY'
+          import os
+          from urllib.parse import quote
+
+          password = os.environ.get("SUPABASE_DB_PASSWORD", "").strip()
+          if not password:
+              raise SystemExit("SUPABASE_DB_PASSWORD secret이 없습니다.")
+
+          encoded = quote(password, safe="")
+          ref = "pcdhshflarandsdwuddb"
+          host = "aws-1-ap-northeast-2.pooler.supabase.com"
+          url = (
+              f"postgresql://postgres.{ref}:{encoded}@{host}:5432/postgres"
+              "?options=-c%20statement_timeout%3D0"
+          )
+
+          github_env = os.environ["GITHUB_ENV"]
+          with open(github_env, "a", encoding="utf-8") as f:
+              f.write(f"DATABASE_URL={url}\n")
+          PY
+
+      - name: Fetch DART company overviews (missing only, batch 100)
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: |
+          if [ -z "$DART_API_KEY" ]; then
+            echo "DART_API_KEY secret 없음 — 스킵"
+            exit 0
+          fi
+          python scripts/fetch_dart_overview.py --missing-only --limit 100 --delay 0.2

@@ -16,8 +16,8 @@ export function StatsBar(
     },
     {
       icon: BarChart3,
-      label: "평균 30일 변화",
-      value: formatChange(stats.avgChange30d),
+      label: "평균 20일 변화",
+      value: formatChange(stats.avgChange20d),
       sub: "전체 종목 평균",
     },
     {
@@ -47,8 +47,8 @@ export function StatsBar(
         </Card>
       ))}
       <p className="col-span-full text-right text-[11px] text-slate-400 dark:text-slate-500 sm:col-span-3">
-        1일 평균 {formatChange(stats.avgChange1d)} · 10일 평균{" "}
-        {formatChange(stats.avgChange10d)} · 마지막 업데이트: {stats.lastUpdated}
+        1일 평균 {formatChange(stats.avgChange1d)} · 5일 평균{" "}
+        {formatChange(stats.avgChange5d)} · 마지막 업데이트: {stats.lastUpdated}
       </p>
     </div>
   );

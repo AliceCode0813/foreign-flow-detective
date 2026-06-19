@@ -1,0 +1,64 @@
+# 매주 월요일 09:00 KST — DART 회사개요 배치 수집
+# GitHub Secret: DART_API_KEY, SUPABASE_DB_PASSWORD
+
+name: Weekly DART overview
+
+on:
+  schedule:
+    # 09:00 KST Monday = 00:00 UTC Monday
+    - cron: "0 0 * * 1"
+  workflow_dispatch:
+
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Configure DATABASE_URL
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python <<'PY'
+          import os
+          from urllib.parse import quote
+
+          password = os.environ.get("SUPABASE_DB_PASSWORD", "").strip()
+          if not password:
+              raise SystemExit("SUPABASE_DB_PASSWORD secret이 없습니다.")
+
+          encoded = quote(password, safe="")
+          ref = "pcdhshflarandsdwuddb"
+          host = "aws-1-ap-northeast-2.pooler.supabase.com"
+          url = (
+              f"postgresql://postgres.{ref}:{encoded}@{host}:5432/postgres"
+              "?options=-c%20statement_timeout%3D0"
+          )
+
+          github_env = os.environ["GITHUB_ENV"]
+          with open(github_env, "a", encoding="utf-8") as f:
+              f.write(f"DATABASE_URL={url}\n")
+          PY
+
+      - name: Ensure schema
+        run: python scripts/ensure_schema.py
+
+      - name: Fetch missing DART overviews
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: |
+          if [ -z "$DART_API_KEY" ]; then
+            echo "DART_API_KEY secret 없음 — 스킵"
+            exit 0
+          fi
+          python scripts/fetch_dart_overview.py --missing-only --limit 200 --delay 0.2

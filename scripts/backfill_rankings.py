@@ -1,8 +1,10 @@
-"""기존 지분 데이터로 rankings_daily 1일 변화 재계산"""
+"""기존 지분 데이터로 rankings_daily 변화율·백분위·스냅샷 재계산"""
 
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -92,13 +94,13 @@ def main():
                     cur.execute(
                         """
                         INSERT INTO rankings_daily
-                          (id, stock_code, trade_date, change_1d, change_10d, change_30d, change_60d,
+                          (id, stock_code, trade_date, change_1d, change_5d, change_20d, change_60d,
                            consecutive_up_days, consecutive_down_days, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                         ON CONFLICT (stock_code, trade_date) DO UPDATE SET
                           change_1d = EXCLUDED.change_1d,
-                          change_10d = EXCLUDED.change_10d,
-                          change_30d = EXCLUDED.change_30d,
+                          change_5d = EXCLUDED.change_5d,
+                          change_20d = EXCLUDED.change_20d,
                           change_60d = EXCLUDED.change_60d,
                           consecutive_up_days = EXCLUDED.consecutive_up_days,
                           consecutive_down_days = EXCLUDED.consecutive_down_days
@@ -108,8 +110,8 @@ def main():
                             code,
                             latest,
                             calc_change(ratios, 1),
-                            calc_change(ratios, 10),
-                            calc_change(ratios, 30),
+                            calc_change(ratios, 5),
+                            calc_change(ratios, 20),
                             calc_change(ratios, 60),
                             streak_up,
                             streak_down,
@@ -120,6 +122,9 @@ def main():
         print(f"[DONE] rankings 재계산 {updated}종목")
     finally:
         conn.close()
+
+    print("[SNAPSHOT] 백분위·TOP10 계산...")
+    subprocess.run([sys.executable, str(ROOT / "scripts" / "compute_snapshots.py")], check=False)
 
 
 if __name__ == "__main__":

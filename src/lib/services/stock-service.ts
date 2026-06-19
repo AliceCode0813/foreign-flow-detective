@@ -38,9 +38,10 @@ function mapSummary(
     ownership: { foreignRatioPct: number }[];
     rankings: {
       change1d: number;
-      change10d: number;
-      change30d: number;
+      change5d: number;
+      change20d: number;
       change60d: number;
+      foreignRatioPercentile: number | null;
     }[];
   },
   latestTradeDate: string,
@@ -54,16 +55,16 @@ function mapSummary(
     sector: s.sector,
     currentRatio: s.ownership[0].foreignRatioPct,
     change1d: r?.change1d ?? 0,
-    change10d: r?.change10d ?? 0,
-    change30d: r?.change30d ?? 0,
+    change5d: r?.change5d ?? 0,
+    change20d: r?.change20d ?? 0,
     change60d: r?.change60d ?? 0,
+    foreignRatioPercentile: r?.foreignRatioPercentile ?? null,
     lastTradeDate: latestTradeDate,
   };
 }
 
 async function fetchLatestTradeDate(): Promise<string | null> {
   return safeQuery(async () => {
-    /** ownership·rankings 모두 충분히 채워진 최신 trade_date (병렬 ingest 불일치 방지) */
     const rows = await prisma.$queryRaw<{ trade_date: string }[]>`
       WITH own AS (
         SELECT trade_date, COUNT(*)::int AS cnt
@@ -94,6 +95,7 @@ export const getLatestTradeDate = unstable_cache(
 
 export async function listStocks(
   market: MarketFilter = "ALL",
+  limit = 500,
 ): Promise<StockSummary[]> {
   return safeQuery(async () => {
     const latestTradeDate = await getLatestTradeDate();
@@ -102,9 +104,28 @@ export async function listStocks(
     const stocks = await prisma.stock.findMany({
       where: marketWhereClause(market),
       orderBy: { name: "asc" },
-      include: {
-        ownership: { where: { tradeDate: latestTradeDate }, take: 1 },
-        rankings: { where: { tradeDate: latestTradeDate }, take: 1 },
+      take: limit,
+      select: {
+        code: true,
+        name: true,
+        market: true,
+        sector: true,
+        ownership: {
+          where: { tradeDate: latestTradeDate },
+          take: 1,
+          select: { foreignRatioPct: true },
+        },
+        rankings: {
+          where: { tradeDate: latestTradeDate },
+          take: 1,
+          select: {
+            change1d: true,
+            change5d: true,
+            change20d: true,
+            change60d: true,
+            foreignRatioPercentile: true,
+          },
+        },
       },
     });
 
@@ -137,13 +158,27 @@ export async function searchStocks(
       },
       orderBy: { name: "asc" },
       take: limit,
-      include: {
+      select: {
+        code: true,
+        name: true,
+        market: true,
+        sector: true,
         ownership: latestTradeDate
-          ? { where: { tradeDate: latestTradeDate }, take: 1 }
-          : { take: 0 },
+          ? { where: { tradeDate: latestTradeDate }, take: 1, select: { foreignRatioPct: true } }
+          : { take: 0, select: { foreignRatioPct: true } },
         rankings: latestTradeDate
-          ? { where: { tradeDate: latestTradeDate }, take: 1 }
-          : { take: 0 },
+          ? {
+              where: { tradeDate: latestTradeDate },
+              take: 1,
+              select: {
+                change1d: true,
+                change5d: true,
+                change20d: true,
+                change60d: true,
+                foreignRatioPercentile: true,
+              },
+            }
+          : { take: 0, select: { change1d: true, change5d: true, change20d: true, change60d: true, foreignRatioPercentile: true } },
       },
     });
 
@@ -154,9 +189,10 @@ export async function searchStocks(
       sector: s.sector,
       currentRatio: s.ownership[0]?.foreignRatioPct ?? 0,
       change1d: s.rankings[0]?.change1d ?? 0,
-      change10d: s.rankings[0]?.change10d ?? 0,
-      change30d: s.rankings[0]?.change30d ?? 0,
+      change5d: s.rankings[0]?.change5d ?? 0,
+      change20d: s.rankings[0]?.change20d ?? 0,
       change60d: s.rankings[0]?.change60d ?? 0,
+      foreignRatioPercentile: s.rankings[0]?.foreignRatioPercentile ?? null,
       lastTradeDate: latestTradeDate ?? "-",
     }));
   }, []);
@@ -175,14 +211,28 @@ export async function getTopMovers(
         tradeDate: latestTradeDate,
         stock: marketWhereClause(market),
       },
-      include: {
+      select: {
+        change1d: true,
+        change5d: true,
+        change20d: true,
+        change60d: true,
+        foreignRatioPercentile: true,
+        stockCode: true,
         stock: {
-          include: {
-            ownership: { where: { tradeDate: latestTradeDate }, take: 1 },
+          select: {
+            code: true,
+            name: true,
+            market: true,
+            sector: true,
+            ownership: {
+              where: { tradeDate: latestTradeDate },
+              take: 1,
+              select: { foreignRatioPct: true },
+            },
           },
         },
       },
-      orderBy: { change10d: "desc" },
+      orderBy: { change5d: "desc" },
       take: limit,
     });
 
@@ -195,9 +245,10 @@ export async function getTopMovers(
         sector: r.stock.sector,
         currentRatio: r.stock.ownership[0].foreignRatioPct,
         change1d: r.change1d ?? 0,
-        change10d: r.change10d ?? 0,
-        change30d: r.change30d ?? 0,
+        change5d: r.change5d ?? 0,
+        change20d: r.change20d ?? 0,
         change60d: r.change60d ?? 0,
+        foreignRatioPercentile: r.foreignRatioPercentile ?? null,
         lastTradeDate: latestTradeDate,
       }));
   }, []);
@@ -205,13 +256,21 @@ export async function getTopMovers(
 
 export const getStockDetail = cache(async (code: string): Promise<StockDetail | null> => {
   return safeQuery(async () => {
-    const stock = await prisma.stock.findUnique({ where: { code } });
+    const stock = await prisma.stock.findUnique({
+      where: { code },
+      select: { code: true, name: true, market: true, sector: true, overview: true },
+    });
     if (!stock) return null;
 
     const ownershipRows = await prisma.foreignOwnershipDaily.findMany({
       where: { stockCode: code },
       orderBy: { tradeDate: "desc" },
       take: 120,
+      select: {
+        tradeDate: true,
+        foreignRatioPct: true,
+        listedShares: true,
+      },
     });
 
     if (ownershipRows.length === 0) return null;
@@ -227,6 +286,13 @@ export const getStockDetail = cache(async (code: string): Promise<StockDetail | 
       where: {
         stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
       },
+      select: {
+        change1d: true,
+        change5d: true,
+        change20d: true,
+        change60d: true,
+        foreignRatioPercentile: true,
+      },
     });
 
     const [fundamental, marketRow] = await Promise.all([
@@ -234,11 +300,13 @@ export const getStockDetail = cache(async (code: string): Promise<StockDetail | 
         where: {
           stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
         },
+        select: { marketCap: true },
       }),
       prisma.stockMarketDaily.findUnique({
         where: {
           stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
         },
+        select: { closePrice: true, changePct: true },
       }),
     ]);
 
@@ -253,12 +321,14 @@ export const getStockDetail = cache(async (code: string): Promise<StockDetail | 
       name: stock.name,
       market: stock.market,
       sector: stock.sector,
+      overview: stock.overview,
       currentRatio: latest.foreignRatioPct,
       change1d: ranking?.change1d ?? calcPeriodChange(ratioRows, 1),
-      change10d: ranking?.change10d ?? calcPeriodChange(ratioRows, 10),
-      change30d: ranking?.change30d ?? calcPeriodChange(ratioRows, 30),
+      change5d: ranking?.change5d ?? calcPeriodChange(ratioRows, 5),
+      change20d: ranking?.change20d ?? calcPeriodChange(ratioRows, 20),
       change60d: ranking?.change60d ?? calcPeriodChange(ratioRows, 60),
       changeAll: calcAllPeriodChange(ratioRows),
+      foreignRatioPercentile: ranking?.foreignRatioPercentile ?? null,
       lastTradeDate: latest.tradeDate,
       marketCap,
       closePrice: marketRow?.closePrice ?? 0,
@@ -269,23 +339,39 @@ export const getStockDetail = cache(async (code: string): Promise<StockDetail | 
 
 export async function getStockHistory(
   code: string,
-  days = 90,
+  days: number | "all" = 60,
 ): Promise<{
   ownership: OwnershipHistoryPoint[];
   market: MarketHistoryPoint[];
 }> {
   return safeQuery(
     async () => {
+      const take = days === "all" ? undefined : days;
       const ownership = await prisma.foreignOwnershipDaily.findMany({
         where: { stockCode: code },
         orderBy: { tradeDate: "desc" },
-        take: days,
+        ...(take ? { take } : {}),
+        select: {
+          tradeDate: true,
+          foreignRatioPct: true,
+          foreignShares: true,
+          listedShares: true,
+        },
       });
 
       const market = await prisma.stockMarketDaily.findMany({
         where: { stockCode: code },
         orderBy: { tradeDate: "desc" },
-        take: days,
+        ...(take ? { take } : {}),
+        select: {
+          tradeDate: true,
+          openPrice: true,
+          highPrice: true,
+          lowPrice: true,
+          closePrice: true,
+          volume: true,
+          changePct: true,
+        },
       });
 
       return {
@@ -317,6 +403,7 @@ export async function getStockInvestmentInfo(
     const latestOwn = await prisma.foreignOwnershipDaily.findFirst({
       where: { stockCode: code },
       orderBy: { tradeDate: "desc" },
+      select: { tradeDate: true, listedShares: true },
     });
     if (!latestOwn) return null;
 
@@ -324,9 +411,21 @@ export async function getStockInvestmentInfo(
     const [fundamental, market] = await Promise.all([
       prisma.stockFundamentalDaily.findUnique({
         where: { stockCode_tradeDate: { stockCode: code, tradeDate } },
+        select: {
+          marketCap: true,
+          listedShares: true,
+          tradingValue: true,
+          per: true,
+          pbr: true,
+          eps: true,
+          bps: true,
+          divYield: true,
+          dps: true,
+        },
       }),
       prisma.stockMarketDaily.findUnique({
         where: { stockCode_tradeDate: { stockCode: code, tradeDate } },
+        select: { closePrice: true, changePct: true },
       }),
     ]);
 
@@ -380,8 +479,8 @@ export function buildCombinedHistory(
 export function buildPeriodChanges(detail: StockDetail): PeriodChange[] {
   return [
     { period: "1d", label: "1일", changePct: detail.change1d },
-    { period: "10d", label: "10일", changePct: detail.change10d },
-    { period: "30d", label: "30일", changePct: detail.change30d },
+    { period: "5d", label: "5일", changePct: detail.change5d },
+    { period: "20d", label: "20일", changePct: detail.change20d },
     { period: "60d", label: "60일", changePct: detail.change60d },
     { period: "all", label: "전체", changePct: detail.changeAll },
   ];
@@ -392,7 +491,7 @@ export async function getDashboardStats(
 ): Promise<DashboardStats> {
   return unstable_cache(
     () => fetchDashboardStats(market),
-    ["dashboard-stats", market],
+    ["dashboard-stats-v2", market],
     { revalidate: 300 },
   )();
 }
@@ -421,8 +520,8 @@ async function fetchDashboardStats(market: MarketFilter): Promise<DashboardStats
               },
               _avg: {
                 change1d: true,
-                change10d: true,
-                change30d: true,
+                change5d: true,
+                change20d: true,
                 change60d: true,
               },
             })
@@ -435,8 +534,8 @@ async function fetchDashboardStats(market: MarketFilter): Promise<DashboardStats
           kospiCount,
           kosdaqCount,
           avgChange1d: 0,
-          avgChange10d: 0,
-          avgChange30d: 0,
+          avgChange5d: 0,
+          avgChange20d: 0,
           avgChange60d: 0,
           lastUpdated: "데이터 없음 — ingest 실행",
           hasData: false,
@@ -451,10 +550,10 @@ async function fetchDashboardStats(market: MarketFilter): Promise<DashboardStats
         kospiCount,
         kosdaqCount,
         avgChange1d: round(avgAgg?._avg.change1d),
-        avgChange10d: round(avgAgg?._avg.change10d),
-        avgChange30d: round(avgAgg?._avg.change30d),
+        avgChange5d: round(avgAgg?._avg.change5d),
+        avgChange20d: round(avgAgg?._avg.change20d),
         avgChange60d: round(avgAgg?._avg.change60d),
-        lastUpdated: `${latestTradeDate} (KRX/pykrx)`,
+        lastUpdated: latestTradeDate,
         hasData: true,
       };
     },
@@ -463,11 +562,24 @@ async function fetchDashboardStats(market: MarketFilter): Promise<DashboardStats
       kospiCount: 0,
       kosdaqCount: 0,
       avgChange1d: 0,
-      avgChange10d: 0,
-      avgChange30d: 0,
+      avgChange5d: 0,
+      avgChange20d: 0,
       avgChange60d: 0,
       lastUpdated: "DB 연결 실패",
       hasData: false,
     },
   );
+}
+
+export async function getMinimalDashboardMeta(): Promise<{
+  hasData: boolean;
+  lastUpdated: string;
+  trackedCount: number;
+}> {
+  const stats = await getDashboardStats("ALL");
+  return {
+    hasData: stats.hasData,
+    lastUpdated: stats.lastUpdated,
+    trackedCount: stats.trackedCount,
+  };
 }

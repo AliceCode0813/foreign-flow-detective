@@ -1,7 +1,7 @@
 import type { PeriodChange } from "@/lib/types";
 import { formatChange, changeColor, changeBg, cn } from "@/lib/utils";
 
-/** 10/30/60/전체 변화율 카드 */
+/** 1/5/20/60/전체 변화율 카드 */
 export function ChangeRateCards({ changes }: { changes: PeriodChange[] }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">

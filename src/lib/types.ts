@@ -1,5 +1,5 @@
 /** 랭킹·변화율 기간 키 */
-export type RankingPeriod = "1d" | "10d" | "30d" | "60d";
+export type RankingPeriod = "1d" | "5d" | "20d" | "60d";
 
 /** 시장 필터: 코스피 / 코스닥 / 전체 */
 export type MarketFilter = "KOSPI" | "KOSDAQ" | "ALL";
@@ -12,9 +12,10 @@ export interface StockSummary {
   sector: string | null;
   currentRatio: number;
   change1d: number;
-  change10d: number;
-  change30d: number;
+  change5d: number;
+  change20d: number;
   change60d: number;
+  foreignRatioPercentile: number | null;
   lastTradeDate: string;
 }
 
@@ -70,6 +71,7 @@ export interface ConsecutiveInflowEntry extends OwnershipMoverRow {
 export interface StockDetail extends StockSummary {
   /** 수집 시작일 대비 최신 지분율 변화 (%p) */
   changeAll: number;
+  overview: string | null;
   marketCap: number;
   closePrice: number;
   changePct: number;
@@ -94,7 +96,7 @@ export interface MarketHistoryPoint {
   changePct: number;
 }
 
-/** 투자 정보 스냅샷 (KRX/pykrx) */
+/** 투자 정보 스냅샷 (DB 사전 수집) */
 export interface StockInvestmentInfo {
   tradeDate: string;
   marketCap: number;
@@ -139,6 +141,7 @@ export interface RankingEntry {
   market: string;
   currentRatio: number;
   change: number;
+  foreignRatioPercentile: number | null;
   tradeDate: string;
 }
 
@@ -148,8 +151,8 @@ export interface DashboardStats {
   kospiCount: number;
   kosdaqCount: number;
   avgChange1d: number;
-  avgChange10d: number;
-  avgChange30d: number;
+  avgChange5d: number;
+  avgChange20d: number;
   avgChange60d: number;
   lastUpdated: string;
   hasData: boolean;

@@ -46,7 +46,7 @@ const prisma = new PrismaClient();
       prisma.rankingDaily.count({{ where: {{ tradeDate: "2026-06-12" }} }}),
       prisma.rankingDaily.aggregate({{
         where: {{ tradeDate: "2026-06-12" }},
-        _avg: {{ change1d: true, change10d: true, change30d: true, change60d: true }},
+        _avg: {{ change1d: true, change5d: true, change20d: true, change60d: true }},
         _count: true,
       }}),
     ]);
@@ -56,7 +56,7 @@ const prisma = new PrismaClient();
       latestTradeDate: latest?.tradeDate ?? null,
       rankingCount20260612: rankingCount,
       aggregateCount: statsSample._count,
-      avgChange10d: statsSample._avg.change10d,
+      avgChange5d: statsSample._avg.change5d,
     }}));
   }} catch (e) {{
     console.log(JSON.stringify({{ ok: false, error: e.message }}));

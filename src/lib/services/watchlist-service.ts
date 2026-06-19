@@ -32,15 +32,38 @@ export async function getWatchlistStocks(): Promise<StockSummary[]> {
 
     const rows = await prisma.watchlist.findMany({
       orderBy: { createdAt: "asc" },
-      include: {
+      select: {
         stock: {
-          include: {
+          select: {
+            code: true,
+            name: true,
+            market: true,
+            sector: true,
             ownership: latestTradeDate
-              ? { where: { tradeDate: latestTradeDate }, take: 1 }
-              : { take: 0 },
+              ? { where: { tradeDate: latestTradeDate }, take: 1, select: { foreignRatioPct: true } }
+              : { take: 0, select: { foreignRatioPct: true } },
             rankings: latestTradeDate
-              ? { where: { tradeDate: latestTradeDate }, take: 1 }
-              : { take: 0 },
+              ? {
+                  where: { tradeDate: latestTradeDate },
+                  take: 1,
+                  select: {
+                    change1d: true,
+                    change5d: true,
+                    change20d: true,
+                    change60d: true,
+                    foreignRatioPercentile: true,
+                  },
+                }
+              : {
+                  take: 0,
+                  select: {
+                    change1d: true,
+                    change5d: true,
+                    change20d: true,
+                    change60d: true,
+                    foreignRatioPercentile: true,
+                  },
+                },
           },
         },
       },
@@ -53,9 +76,10 @@ export async function getWatchlistStocks(): Promise<StockSummary[]> {
       sector: r.stock.sector,
       currentRatio: r.stock.ownership[0]?.foreignRatioPct ?? 0,
       change1d: r.stock.rankings[0]?.change1d ?? 0,
-      change10d: r.stock.rankings[0]?.change10d ?? 0,
-      change30d: r.stock.rankings[0]?.change30d ?? 0,
+      change5d: r.stock.rankings[0]?.change5d ?? 0,
+      change20d: r.stock.rankings[0]?.change20d ?? 0,
       change60d: r.stock.rankings[0]?.change60d ?? 0,
+      foreignRatioPercentile: r.stock.rankings[0]?.foreignRatioPercentile ?? null,
       lastTradeDate: latestTradeDate ?? "-",
     }));
   } catch (error) {

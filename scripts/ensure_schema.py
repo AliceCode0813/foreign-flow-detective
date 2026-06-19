@@ -44,7 +44,29 @@ UNIQUE_INDEXES: list[tuple[str, str, str]] = [
 COLUMN_ALTERS: list[str] = [
     "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS consecutive_up_days INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS consecutive_down_days INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS change_5d DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS change_20d DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS foreign_ratio_percentile DOUBLE PRECISION",
+    "ALTER TABLE stocks ADD COLUMN IF NOT EXISTS overview TEXT",
+    "ALTER TABLE stocks ADD COLUMN IF NOT EXISTS dart_corp_code VARCHAR(8)",
 ]
+
+SNAPSHOT_TABLE_DDL = """
+CREATE TABLE IF NOT EXISTS rankings_snapshot_daily (
+  id VARCHAR(25) PRIMARY KEY,
+  trade_date VARCHAR(10) NOT NULL,
+  market VARCHAR(20) NOT NULL,
+  period VARCHAR(4) NOT NULL,
+  direction VARCHAR(6) NOT NULL,
+  rank INTEGER NOT NULL,
+  stock_code VARCHAR(6) NOT NULL REFERENCES stocks(code) ON DELETE CASCADE,
+  change DOUBLE PRECISION NOT NULL,
+  current_ratio DOUBLE PRECISION NOT NULL,
+  foreign_ratio_percentile DOUBLE PRECISION,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (trade_date, market, period, direction, rank)
+)
+"""
 
 STREAK_INDEXES: list[tuple[str, str, str]] = [
     (
@@ -58,6 +80,24 @@ STREAK_INDEXES: list[tuple[str, str, str]] = [
         "rankings_daily_trade_date_consecutive_down_days_idx",
         "CREATE INDEX IF NOT EXISTS rankings_daily_trade_date_consecutive_down_days_idx "
         "ON rankings_daily (trade_date, consecutive_down_days DESC)",
+    ),
+    (
+        "rankings_daily",
+        "rankings_daily_trade_date_change_5d_idx",
+        "CREATE INDEX IF NOT EXISTS rankings_daily_trade_date_change_5d_idx "
+        "ON rankings_daily (trade_date, change_5d DESC)",
+    ),
+    (
+        "rankings_daily",
+        "rankings_daily_trade_date_change_20d_idx",
+        "CREATE INDEX IF NOT EXISTS rankings_daily_trade_date_change_20d_idx "
+        "ON rankings_daily (trade_date, change_20d DESC)",
+    ),
+    (
+        "rankings_snapshot_daily",
+        "rankings_snapshot_daily_lookup_idx",
+        "CREATE INDEX IF NOT EXISTS rankings_snapshot_daily_lookup_idx "
+        "ON rankings_snapshot_daily (trade_date, market, period, direction)",
     ),
 ]
 
@@ -94,6 +134,9 @@ def main() -> int:
     for ddl in COLUMN_ALTERS:
         print(f"[ensure_schema] {ddl[:60]}...")
         cur.execute(ddl)
+
+    print("[ensure_schema] rankings_snapshot_daily table...")
+    cur.execute(SNAPSHOT_TABLE_DDL)
 
     for table, index_name, ddl in STREAK_INDEXES:
         cur.execute(

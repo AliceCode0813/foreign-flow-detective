@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { ChartBox } from "@/components/ui/ChartBox";
@@ -101,12 +102,35 @@ function HistoryTable({
   );
 }
 
+function mergeCombined(
+  ownership: OwnershipHistoryPoint[],
+  market: MarketHistoryPoint[],
+): CombinedHistoryRow[] {
+  const marketMap = new Map(market.map((m) => [m.date, m]));
+  return ownership.map((o) => {
+    const m = marketMap.get(o.date);
+    return {
+      date: o.date,
+      foreignRatioPct: o.foreignRatioPct,
+      foreignShares: o.foreignShares,
+      openPrice: m?.openPrice ?? null,
+      highPrice: m?.highPrice ?? null,
+      lowPrice: m?.lowPrice ?? null,
+      closePrice: m?.closePrice ?? null,
+      volume: m?.volume ?? null,
+      changePct: m?.changePct ?? null,
+    };
+  });
+}
+
 export function StockChartSection({
-  ownership,
-  market,
-  combined,
+  stockCode,
+  ownership: initialOwnership,
+  market: initialMarket,
+  combined: initialCombined,
   stockName,
 }: {
+  stockCode: string;
   ownership: OwnershipHistoryPoint[];
   market: MarketHistoryPoint[];
   combined: CombinedHistoryRow[];
@@ -114,20 +138,49 @@ export function StockChartSection({
 }) {
   const [chartMode, setChartMode] = useState<ChartMode>("candle");
   const [tableMode, setTableMode] = useState<TableMode>("combined");
-  const [days, setDays] = useState<DayOption>(60);
+  const [days, setDays] = useState<DayOption | "all">(60);
+  const [fullLoaded, setFullLoaded] = useState(false);
+  const [loadingFull, setLoadingFull] = useState(false);
+  const [ownership, setOwnership] = useState(initialOwnership);
+  const [market, setMarket] = useState(initialMarket);
+  const [combined, setCombined] = useState(initialCombined);
+
+  const loadFullHistory = useCallback(async () => {
+    if (fullLoaded || loadingFull) return;
+    setLoadingFull(true);
+    try {
+      const res = await fetch(`/api/stocks/${stockCode}/history?days=all`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as {
+        ownership: OwnershipHistoryPoint[];
+        market: MarketHistoryPoint[];
+      };
+      setOwnership(data.ownership);
+      setMarket(data.market);
+      setCombined(mergeCombined(data.ownership, data.market));
+      setFullLoaded(true);
+      setDays("all");
+    } catch {
+      /* keep partial data */
+    } finally {
+      setLoadingFull(false);
+    }
+  }, [stockCode, fullLoaded, loadingFull]);
 
   const marketMap = useMemo(() => new Map(market.map((m) => [m.date, m])), [market]);
 
+  const sliceCount = days === "all" ? ownership.length : days;
+
   const candleData = useMemo(() => {
     return market
-      .slice(-days)
+      .slice(-sliceCount)
       .map((m) => normalizeOhlcBar(m))
       .filter((d): d is NonNullable<typeof d> => d !== null);
-  }, [market, days]);
+  }, [market, sliceCount]);
 
   const combinedChartData = useMemo(
     () =>
-      ownership.slice(-days).map((o) => {
+      ownership.slice(-sliceCount).map((o) => {
         const m = marketMap.get(o.date);
         return {
           date: o.date,
@@ -136,10 +189,10 @@ export function StockChartSection({
           close: m?.closePrice ?? null,
         };
       }),
-    [ownership, marketMap, days],
+    [ownership, marketMap, sliceCount],
   );
 
-  const tableRows = useMemo(() => combined.slice(-days), [combined, days]);
+  const tableRows = useMemo(() => combined.slice(-sliceCount), [combined, sliceCount]);
 
   const hasRealOhlc = market.some(
     (m) => m.openPrice > 0 && m.highPrice > m.lowPrice,
@@ -148,9 +201,11 @@ export function StockChartSection({
   const effectiveChart =
     chartMode === "candle" && canShowCandle ? "candle" : "combined";
 
+  const periodLabel = days === "all" ? "전체" : `${days}거래일`;
+
   return (
     <Card>
-      <CardTitle subtitle={`KRX/pykrx · 최근 ${days}거래일`}>
+      <CardTitle subtitle={`DB 저장 데이터 · ${periodLabel}`}>
         {stockName} 차트 & 데이터
       </CardTitle>
 
@@ -168,7 +223,7 @@ export function StockChartSection({
               !canShowCandle && "opacity-40",
             )}
           >
-            캔들차트 (KRX)
+            캔들차트
           </button>
           <button
             type="button"
@@ -187,8 +242,16 @@ export function StockChartSection({
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <span>기간</span>
           <select
-            value={days}
-            onChange={(e) => setDays(Number(e.target.value) as DayOption)}
+            value={days === "all" ? "all" : days}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "all") {
+                if (!fullLoaded) void loadFullHistory();
+                else setDays("all");
+              } else {
+                setDays(Number(v) as DayOption);
+              }
+            }}
             className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
           >
             {DAY_OPTIONS.map((d) => (
@@ -196,7 +259,19 @@ export function StockChartSection({
                 {d}일
               </option>
             ))}
+            <option value="all">전체 기간</option>
           </select>
+          {!fullLoaded && (
+            <button
+              type="button"
+              onClick={() => void loadFullHistory()}
+              disabled={loadingFull}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+            >
+              {loadingFull && <Loader2 className="h-3 w-3 animate-spin" />}
+              전체 기간 불러오기
+            </button>
+          )}
         </div>
       </div>
 
@@ -252,8 +327,7 @@ export function StockChartSection({
 
       {!hasRealOhlc && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-          시가·고가·저가 미수집 — `npm.cmd run backfill:market` 실행 후 실제 KRX 캔들이 표시됩니다.
-          (현재는 종가 기준으로 표시될 수 있습니다.)
+          시가·고가·저가 미수집 — backfill:market 실행 후 캔들차트가 표시됩니다.
         </p>
       )}
 
@@ -281,7 +355,11 @@ export function StockChartSection({
             </button>
           ))}
         </div>
-        <HistoryTable rows={tableRows} mode={tableMode} maxRows={days} />
+        <HistoryTable
+          rows={tableRows}
+          mode={tableMode}
+          maxRows={days === "all" ? tableRows.length : days}
+        />
       </div>
     </Card>
   );

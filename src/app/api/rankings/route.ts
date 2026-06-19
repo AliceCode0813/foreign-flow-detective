@@ -5,7 +5,7 @@ import type { RankingPeriod } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const VALID_PERIODS: RankingPeriod[] = ["1d", "10d", "30d", "60d"];
+const VALID_PERIODS: RankingPeriod[] = ["1d", "5d", "20d", "60d"];
 
 /** GET /api/rankings?period=60d&limit=10&market=KOSPI */
 export async function GET(request: NextRequest) {
