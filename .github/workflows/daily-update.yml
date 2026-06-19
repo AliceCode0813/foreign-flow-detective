@@ -1,4 +1,4 @@
-# 평일 20:30 KST — 종목 동기화 + KRX 수집 (Supabase 직접 반영)
+# 평일 20:47 KST — 종목 동기화 + KRX 수집 (Supabase 직접 반영)
 # KOSPI / KOSDAQ 병렬 수집, PER/PBR 생략, ingest 후 스냅샷·백분위 계산
 #
 # GitHub Secrets:
@@ -6,19 +6,17 @@
 #   DART_API_KEY (선택 — fetch_dart_overview weekly job)
 #
 # 스케줄 참고:
-#   GitHub Actions cron은 UTC 기준. `30 11 * * 1-5` = 월~금 11:30 UTC = 20:30 KST.
-#   공개 repo 무료 tier에서는 지연·스킵이 발생할 수 있어 21:30 KST 백업 cron 추가.
-#   첫 scheduled 성공이 목요일(2026-06-18)인 경우, 금요일 run은 repo/워크플로우
-#   default branch 반영 직후 또는 GitHub queue 지연으로 아직 없을 수 있음.
+#   GitHub Actions cron은 UTC 기준. `47 11 * * 1-5` = 월~금 11:47 UTC = 20:47 KST.
+#   공개 repo 무료 tier에서는 지연·스킵이 발생할 수 있어 21:47 KST 백업 cron 추가.
 
 name: Daily data update
 
 on:
   schedule:
-    # 20:30 KST = 11:30 UTC, 월~금 (GitHub: 0=일, 1=월 … 5=금)
-    - cron: "30 11 * * 1-5"
-    # 백업: 21:30 KST = 12:30 UTC (primary 실패·지연 대비)
-    - cron: "30 12 * * 1-5"
+    # 20:47 KST = 11:47 UTC, 월~금 (GitHub: 0=일, 1=월 … 5=금)
+    - cron: "47 11 * * 1-5"
+    # 백업: 21:47 KST = 12:47 UTC (primary 실패·지연 대비)
+    - cron: "47 12 * * 1-5"
   workflow_dispatch:
 
 concurrency:
