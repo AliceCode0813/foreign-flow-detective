@@ -55,6 +55,8 @@ model RankingDaily {
   change10d Float    @map("change_10d")
   change30d Float    @map("change_30d")
   change60d Float    @map("change_60d")
+  consecutiveUpDays   Int      @default(0) @map("consecutive_up_days")
+  consecutiveDownDays Int      @default(0) @map("consecutive_down_days")
   createdAt DateTime @default(now()) @map("created_at")
 
   stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
@@ -64,6 +66,8 @@ model RankingDaily {
   @@index([tradeDate, change60d])
   @@index([tradeDate, change30d])
   @@index([tradeDate, change10d])
+  @@index([tradeDate, consecutiveUpDays])
+  @@index([tradeDate, consecutiveDownDays])
   @@map("rankings_daily")
 }
 

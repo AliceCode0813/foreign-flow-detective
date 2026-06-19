@@ -41,6 +41,27 @@ UNIQUE_INDEXES: list[tuple[str, str, str]] = [
 ]
 
 
+COLUMN_ALTERS: list[str] = [
+    "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS consecutive_up_days INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE rankings_daily ADD COLUMN IF NOT EXISTS consecutive_down_days INTEGER NOT NULL DEFAULT 0",
+]
+
+STREAK_INDEXES: list[tuple[str, str, str]] = [
+    (
+        "rankings_daily",
+        "rankings_daily_trade_date_consecutive_up_days_idx",
+        "CREATE INDEX IF NOT EXISTS rankings_daily_trade_date_consecutive_up_days_idx "
+        "ON rankings_daily (trade_date, consecutive_up_days DESC)",
+    ),
+    (
+        "rankings_daily",
+        "rankings_daily_trade_date_consecutive_down_days_idx",
+        "CREATE INDEX IF NOT EXISTS rankings_daily_trade_date_consecutive_down_days_idx "
+        "ON rankings_daily (trade_date, consecutive_down_days DESC)",
+    ),
+]
+
+
 def get_url() -> str:
     env = read_env()
     for key in ("DATABASE_URL", "LOCAL_DATABASE_URL"):
@@ -57,6 +78,24 @@ def main() -> int:
     cur = conn.cursor()
 
     for table, index_name, ddl in UNIQUE_INDEXES:
+        cur.execute(
+            """
+            SELECT 1 FROM pg_indexes
+            WHERE schemaname = 'public' AND tablename = %s AND indexname = %s
+            """,
+            (table, index_name),
+        )
+        if cur.fetchone():
+            print(f"[ensure_schema] OK {index_name}")
+            continue
+        print(f"[ensure_schema] creating {index_name}...")
+        cur.execute(ddl)
+
+    for ddl in COLUMN_ALTERS:
+        print(f"[ensure_schema] {ddl[:60]}...")
+        cur.execute(ddl)
+
+    for table, index_name, ddl in STREAK_INDEXES:
         cur.execute(
             """
             SELECT 1 FROM pg_indexes

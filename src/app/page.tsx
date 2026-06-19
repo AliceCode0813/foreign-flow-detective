@@ -2,7 +2,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { StockSearch } from "@/components/dashboard/StockSearch";
 import { TopChangeRanking } from "@/components/dashboard/TopChangeRanking";
 import { MarketFilterTabs } from "@/components/dashboard/MarketFilterTabs";
-import { ConsecutiveInflowLoader } from "@/components/dashboard/ConsecutiveInflowLoader";
+import { ConsecutiveStreakLoader } from "@/components/dashboard/ConsecutiveStreakLoader";
 import { WatchlistSection } from "@/components/dashboard/WatchlistSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { parseMarketFilter } from "@/lib/market";
@@ -23,7 +23,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const [stats, rankings, watchlist] = await Promise.all([
     getDashboardStats(market),
-    getAllPeriodRankings(30, market),
+    getAllPeriodRankings(15, market),
     getWatchlistStocks(),
   ]);
 
@@ -66,7 +66,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <WatchlistSection stocks={watchlist} />
 
           <section className="mb-8 mt-8">
-            <ConsecutiveInflowLoader market={market} marketLabel={marketLabel} />
+            <ConsecutiveStreakLoader market={market} marketLabel={marketLabel} />
           </section>
         </>
       )}

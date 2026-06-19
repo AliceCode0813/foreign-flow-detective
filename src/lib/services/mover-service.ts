@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { inferOwnershipChange } from "@/lib/inference";
 import { marketWhereClause } from "@/lib/market";
@@ -268,92 +269,177 @@ const EMPTY_INFERENCE = {
   method: "rule" as const,
 };
 
-/** 연속 유입 TOP N — ownership 이력만 조회 (시장·전체 movers 미전송) */
+/** 연속 유입/유출 TOP N — ingest 시 저장한 streak 컬럼 조회 (경량) */
+export async function getConsecutiveStreakTops(
+  market: MarketFilter = "ALL",
+  limit = 10,
+  minStreak = 3,
+): Promise<{
+  inflow: ConsecutiveInflowEntry[];
+  outflow: ConsecutiveInflowEntry[];
+  tradeDate: string | null;
+}> {
+  return unstable_cache(
+    () => fetchConsecutiveStreakTops(market, limit, minStreak),
+    ["consecutive-streak", market, String(limit), String(minStreak)],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchConsecutiveStreakTops(
+  market: MarketFilter,
+  limit: number,
+  minStreak: number,
+): Promise<{
+  inflow: ConsecutiveInflowEntry[];
+  outflow: ConsecutiveInflowEntry[];
+  tradeDate: string | null;
+}> {
+  const tradeDate = await getLatestTradeDate();
+  if (!tradeDate) {
+    return { inflow: [], outflow: [], tradeDate: null };
+  }
+
+  try {
+    const marketFilter = marketWhereClause(market);
+    const [inflowRows, outflowRows] = await Promise.all([
+      prisma.rankingDaily.findMany({
+        where: {
+          tradeDate,
+          consecutiveUpDays: { gte: minStreak },
+          stock: marketFilter,
+        },
+        orderBy: [{ consecutiveUpDays: "desc" }, { change60d: "desc" }],
+        take: limit,
+        include: {
+          stock: {
+            include: {
+              ownership: { where: { tradeDate }, take: 1 },
+            },
+          },
+        },
+      }),
+      prisma.rankingDaily.findMany({
+        where: {
+          tradeDate,
+          consecutiveDownDays: { gte: minStreak },
+          stock: marketFilter,
+        },
+        orderBy: [{ consecutiveDownDays: "desc" }, { change60d: "asc" }],
+        take: limit,
+        include: {
+          stock: {
+            include: {
+              ownership: { where: { tradeDate }, take: 1 },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const codes = [...inflowRows, ...outflowRows].map((r) => r.stockCode);
+    const sparklines = await fetchSparklines(codes, tradeDate);
+
+    const inflow = inflowRows.map((row) =>
+      toStreakEntry(row, row.consecutiveUpDays, tradeDate, sparklines.get(row.stockCode) ?? []),
+    );
+    const outflow = outflowRows.map((row) =>
+      toStreakEntry(row, row.consecutiveDownDays, tradeDate, sparklines.get(row.stockCode) ?? []),
+    );
+
+    return { inflow, outflow, tradeDate };
+  } catch (error) {
+    console.error("[mover-service] getConsecutiveStreakTops", error);
+    return { inflow: [], outflow: [], tradeDate };
+  }
+}
+
+async function fetchSparklines(
+  codes: string[],
+  tradeDate: string,
+): Promise<Map<string, number[]>> {
+  if (codes.length === 0) return new Map();
+
+  const historySince = subtractCalendarDays(tradeDate, HISTORY_CALENDAR_BUFFER);
+  const ownershipRows = await prisma.foreignOwnershipDaily.findMany({
+    where: {
+      stockCode: { in: codes },
+      tradeDate: { gte: historySince, lte: tradeDate },
+    },
+    orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+    select: { stockCode: true, foreignRatioPct: true },
+  });
+
+  const byCode = groupRecentByCode(
+    ownershipRows.map((r) => ({
+      stockCode: r.stockCode,
+      tradeDate: tradeDate,
+      foreignRatioPct: r.foreignRatioPct,
+      foreignShares: null,
+      listedShares: null,
+    })),
+    HISTORY_DAYS,
+  );
+
+  const map = new Map<string, number[]>();
+  for (const code of codes) {
+    map.set(code, buildRatioHistory60d(byCode.get(code) ?? []));
+  }
+  return map;
+}
+
+function toStreakEntry(
+  row: {
+    stockCode: string;
+    change1d: number;
+    change10d: number;
+    change30d: number;
+    change60d: number;
+    stock: {
+      code: string;
+      name: string;
+      market: string;
+      sector: string | null;
+      ownership: { foreignRatioPct: number }[];
+    };
+  },
+  streakDays: number,
+  tradeDate: string,
+  ratioHistory60d: number[],
+): ConsecutiveInflowEntry {
+  const change1d = row.change1d ?? 0;
+  const change60d = row.change60d ?? 0;
+  return {
+    code: row.stock.code,
+    name: row.stock.name,
+    market: row.stock.market,
+    sector: row.stock.sector,
+    currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
+    change1d,
+    change10d: row.change10d ?? 0,
+    change30d: row.change30d ?? 0,
+    change60d,
+    lastTradeDate: tradeDate,
+    absChange1d: Math.abs(change1d),
+    absChange60d: Math.abs(change60d),
+    marketCap: 0,
+    closePrice: 0,
+    priceChange1d: 0,
+    priceChange60d: 0,
+    volume: 0,
+    ratioHistory60d,
+    consecutiveUpDays: streakDays,
+    inference: EMPTY_INFERENCE,
+    streakDays,
+  };
+}
+
+/** @deprecated getConsecutiveStreakTops 사용 */
 export async function getConsecutiveInflowTop(
   market: MarketFilter = "ALL",
   limit = 10,
   minStreak = 3,
 ): Promise<ConsecutiveInflowEntry[]> {
-  const tradeDate = await getLatestTradeDate();
-  if (!tradeDate) return [];
-
-  const historySince = subtractCalendarDays(tradeDate, HISTORY_CALENDAR_BUFFER);
-
-  try {
-    const rankings = await prisma.rankingDaily.findMany({
-      where: {
-        tradeDate,
-        stock: marketWhereClause(market),
-      },
-      include: { stock: true },
-    });
-
-    if (rankings.length === 0) return [];
-
-    const codes = rankings.map((r) => r.stockCode);
-    const ownershipRows = await prisma.foreignOwnershipDaily.findMany({
-      where: {
-        stockCode: { in: codes },
-        tradeDate: { gte: historySince, lte: tradeDate },
-      },
-      orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
-      select: {
-        stockCode: true,
-        tradeDate: true,
-        foreignRatioPct: true,
-        foreignShares: true,
-        listedShares: true,
-      },
-    });
-
-    const ownershipByCode = groupRecentByCode(ownershipRows, HISTORY_DAYS);
-
-    const candidates: ConsecutiveInflowEntry[] = [];
-    for (const row of rankings) {
-      const ownership = ownershipByCode.get(row.stockCode) ?? [];
-      if (ownership.length === 0) continue;
-
-      const ratioHistory60d = buildRatioHistory60d(ownership);
-      const consecutiveUpDays = countConsecutiveUpDays(ratioHistory60d);
-      if (consecutiveUpDays < minStreak) continue;
-
-      const latestOwn = ownership[0];
-      const change1d = row.change1d ?? 0;
-      const change60d = row.change60d ?? 0;
-
-      candidates.push({
-        code: row.stock.code,
-        name: row.stock.name,
-        market: row.stock.market,
-        sector: row.stock.sector,
-        currentRatio: latestOwn.foreignRatioPct,
-        change1d,
-        change10d: row.change10d ?? 0,
-        change30d: row.change30d ?? 0,
-        change60d,
-        lastTradeDate: tradeDate,
-        absChange1d: Math.abs(change1d),
-        absChange60d: Math.abs(change60d),
-        marketCap: 0,
-        closePrice: 0,
-        priceChange1d: 0,
-        priceChange60d: 0,
-        volume: 0,
-        ratioHistory60d,
-        consecutiveUpDays,
-        inference: EMPTY_INFERENCE,
-        streakDays: consecutiveUpDays,
-      });
-    }
-
-    return candidates
-      .sort(
-        (a, b) =>
-          b.consecutiveUpDays - a.consecutiveUpDays || b.change60d - a.change60d,
-      )
-      .slice(0, limit);
-  } catch (error) {
-    console.error("[mover-service] getConsecutiveInflowTop", error);
-    return [];
-  }
+  const { inflow } = await getConsecutiveStreakTops(market, limit, minStreak);
+  return inflow;
 }

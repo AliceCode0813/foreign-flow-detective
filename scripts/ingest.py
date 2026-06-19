@@ -360,6 +360,30 @@ def calc_change(ratios: list[float], days: int) -> float:
     return round(end - ratios[idx], 4)
 
 
+def count_consecutive_up(ratios: list[float]) -> int:
+    if len(ratios) < 2:
+        return 0
+    count = 0
+    for i in range(len(ratios) - 1, 0, -1):
+        if ratios[i] > ratios[i - 1]:
+            count += 1
+        else:
+            break
+    return count
+
+
+def count_consecutive_down(ratios: list[float]) -> int:
+    if len(ratios) < 2:
+        return 0
+    count = 0
+    for i in range(len(ratios) - 1, 0, -1):
+        if ratios[i] < ratios[i - 1]:
+            count += 1
+        else:
+            break
+    return count
+
+
 def compute_rankings(cur, code: str):
     cur.execute(
         """
@@ -376,17 +400,22 @@ def compute_rankings(cur, code: str):
 
     ratios = [float(r[1]) for r in rows]
     latest_date = rows[-1][0]
+    streak_up = count_consecutive_up(ratios)
+    streak_down = count_consecutive_down(ratios)
 
     cur.execute(
         """
         INSERT INTO rankings_daily
-          (id, stock_code, trade_date, change_1d, change_10d, change_30d, change_60d, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+          (id, stock_code, trade_date, change_1d, change_10d, change_30d, change_60d,
+           consecutive_up_days, consecutive_down_days, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (stock_code, trade_date) DO UPDATE SET
           change_1d = EXCLUDED.change_1d,
           change_10d = EXCLUDED.change_10d,
           change_30d = EXCLUDED.change_30d,
           change_60d = EXCLUDED.change_60d,
+          consecutive_up_days = EXCLUDED.consecutive_up_days,
+          consecutive_down_days = EXCLUDED.consecutive_down_days,
           created_at = NOW()
         """,
         (
@@ -397,6 +426,8 @@ def compute_rankings(cur, code: str):
             calc_change(ratios, 10),
             calc_change(ratios, 30),
             calc_change(ratios, 60),
+            streak_up,
+            streak_down,
         ),
     )
 
