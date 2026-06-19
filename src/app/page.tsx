@@ -2,17 +2,16 @@ import { AppShell } from "@/components/layout/AppShell";
 import { StockSearch } from "@/components/dashboard/StockSearch";
 import { TopChangeRanking } from "@/components/dashboard/TopChangeRanking";
 import { MarketFilterTabs } from "@/components/dashboard/MarketFilterTabs";
-import { ConsecutiveInflowPanel } from "@/components/dashboard/ConsecutiveInflowPanel";
+import { ConsecutiveInflowLoader } from "@/components/dashboard/ConsecutiveInflowLoader";
 import { WatchlistSection } from "@/components/dashboard/WatchlistSection";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { parseMarketFilter } from "@/lib/market";
-import { getConsecutiveInflowTop } from "@/lib/services/mover-service";
 import { getAllPeriodRankings } from "@/lib/services/ranking-service";
-import { getDashboardStats, getLatestTradeDate } from "@/lib/services/stock-service";
+import { getDashboardStats } from "@/lib/services/stock-service";
 import { getWatchlistStocks } from "@/lib/services/watchlist-service";
 import { Suspense } from "react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 interface DashboardPageProps {
   searchParams: Promise<{ market?: string }>;
@@ -22,12 +21,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const params = await searchParams;
   const market = parseMarketFilter(params.market);
 
-  const [stats, rankings, watchlist, consecutiveInflow, tradeDate] = await Promise.all([
+  const [stats, rankings, watchlist] = await Promise.all([
     getDashboardStats(market),
     getAllPeriodRankings(30, market),
     getWatchlistStocks(),
-    getConsecutiveInflowTop(market, 10),
-    getLatestTradeDate(),
   ]);
 
   const marketLabel =
@@ -69,12 +66,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <WatchlistSection stocks={watchlist} />
 
           <section className="mb-8 mt-8">
-            <ConsecutiveInflowPanel
-              entries={consecutiveInflow}
-              tradeDate={tradeDate}
-              market={market}
-              marketLabel={marketLabel}
-            />
+            <ConsecutiveInflowLoader market={market} marketLabel={marketLabel} />
           </section>
         </>
       )}

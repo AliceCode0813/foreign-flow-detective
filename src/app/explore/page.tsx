@@ -6,7 +6,7 @@ import { parseMarketFilter } from "@/lib/market";
 import { getDashboardStats } from "@/lib/services/stock-service";
 import { Suspense } from "react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 interface ExplorePageProps {
   searchParams: Promise<{ market?: string }>;

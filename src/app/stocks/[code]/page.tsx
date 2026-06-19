@@ -6,10 +6,10 @@ import { ChangeRateCards } from "@/components/stock/ChangeRateCards";
 import { StockChartSection } from "@/components/stock/StockChartSection";
 import { StockInvestmentPanel } from "@/components/stock/StockInvestmentPanel";
 import { FavoriteButton } from "@/components/stock/FavoriteButton";
+import { prisma } from "@/lib/db";
 import {
   buildCombinedHistory,
   buildPeriodChanges,
-  getDashboardStats,
   getStockDetail,
   getStockHistory,
   getStockInvestmentInfo,
@@ -28,11 +28,14 @@ interface StockDetailPageProps {
   params: Promise<{ code: string }>;
 }
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export async function generateMetadata({ params }: StockDetailPageProps) {
   const { code } = await params;
-  const stock = await getStockDetail(code);
+  const stock = await prisma.stock.findUnique({
+    where: { code },
+    select: { name: true, code: true },
+  });
   if (!stock) return { title: "종목 없음" };
   return {
     title: `${stock.name} (${stock.code}) | Foreign Flow Detective`,
@@ -42,11 +45,10 @@ export async function generateMetadata({ params }: StockDetailPageProps) {
 
 export default async function StockDetailPage({ params }: StockDetailPageProps) {
   const { code } = await params;
-  const [stock, history, investment, stats, watchlisted] = await Promise.all([
+  const [stock, history, investment, watchlisted] = await Promise.all([
     getStockDetail(code),
     getStockHistory(code, 120),
     getStockInvestmentInfo(code),
-    getDashboardStats(),
     isWatchlisted(code),
   ]);
 
@@ -58,7 +60,7 @@ export default async function StockDetailPage({ params }: StockDetailPageProps) 
   const combined = buildCombinedHistory(history.ownership, history.market);
 
   return (
-    <AppShell hasData={stats.hasData}>
+    <AppShell hasData={true}>
       <Link
         href="/"
         className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"

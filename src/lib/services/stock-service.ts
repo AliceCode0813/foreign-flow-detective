@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { marketWhereClause } from "@/lib/market";
@@ -62,11 +63,23 @@ function mapSummary(
 
 async function fetchLatestTradeDate(): Promise<string | null> {
   return safeQuery(async () => {
-    const rows = await prisma.$queryRaw<{ trade_date: string; count: bigint }[]>`
-      SELECT trade_date, COUNT(*)::bigint AS count
-      FROM foreign_ownership_daily
-      GROUP BY trade_date
-      ORDER BY count DESC, trade_date DESC
+    /** ownership·rankings 모두 충분히 채워진 최신 trade_date (병렬 ingest 불일치 방지) */
+    const rows = await prisma.$queryRaw<{ trade_date: string }[]>`
+      WITH own AS (
+        SELECT trade_date, COUNT(*)::int AS cnt
+        FROM foreign_ownership_daily
+        GROUP BY trade_date
+      ),
+      rk AS (
+        SELECT trade_date, COUNT(*)::int AS cnt
+        FROM rankings_daily
+        GROUP BY trade_date
+      )
+      SELECT o.trade_date
+      FROM own o
+      INNER JOIN rk r ON r.trade_date = o.trade_date
+      WHERE o.cnt >= 2500 AND r.cnt >= 2500
+      ORDER BY o.trade_date DESC
       LIMIT 1
     `;
     return rows[0]?.trade_date ?? null;
@@ -75,7 +88,7 @@ async function fetchLatestTradeDate(): Promise<string | null> {
 
 export const getLatestTradeDate = unstable_cache(
   fetchLatestTradeDate,
-  ["latest-trade-date"],
+  ["latest-trade-date-v2"],
   { revalidate: 300 },
 );
 
@@ -190,24 +203,26 @@ export async function getTopMovers(
   }, []);
 }
 
-export async function getStockDetail(code: string): Promise<StockDetail | null> {
+export const getStockDetail = cache(async (code: string): Promise<StockDetail | null> => {
   return safeQuery(async () => {
     const stock = await prisma.stock.findUnique({ where: { code } });
     if (!stock) return null;
 
     const ownershipRows = await prisma.foreignOwnershipDaily.findMany({
       where: { stockCode: code },
-      orderBy: { tradeDate: "asc" },
+      orderBy: { tradeDate: "desc" },
+      take: 120,
     });
 
     if (ownershipRows.length === 0) return null;
 
-    const ratioRows: RatioRow[] = ownershipRows.map((r) => ({
+    const sorted = [...ownershipRows].reverse();
+    const ratioRows: RatioRow[] = sorted.map((r) => ({
       tradeDate: r.tradeDate,
       foreignRatioPct: r.foreignRatioPct,
     }));
 
-    const latest = ownershipRows[ownershipRows.length - 1];
+    const latest = sorted[sorted.length - 1];
     const ranking = await prisma.rankingDaily.findUnique({
       where: {
         stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
@@ -250,7 +265,7 @@ export async function getStockDetail(code: string): Promise<StockDetail | null> 
       changePct: marketRow?.changePct ?? 0,
     };
   }, null);
-}
+});
 
 export async function getStockHistory(
   code: string,
@@ -375,6 +390,14 @@ export function buildPeriodChanges(detail: StockDetail): PeriodChange[] {
 export async function getDashboardStats(
   market: MarketFilter = "ALL",
 ): Promise<DashboardStats> {
+  return unstable_cache(
+    () => fetchDashboardStats(market),
+    ["dashboard-stats", market],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchDashboardStats(market: MarketFilter): Promise<DashboardStats> {
   return safeQuery(
     async () => {
       const latestTradeDate = await getLatestTradeDate();
