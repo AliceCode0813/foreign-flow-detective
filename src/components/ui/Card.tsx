@@ -23,17 +23,33 @@ export function Card({
 export function CardTitle({
   children,
   subtitle,
+  className,
+  titleClassName,
+  subtitleClassName,
 }: {
   children: React.ReactNode;
   subtitle?: string;
+  className?: string;
+  titleClassName?: string;
+  subtitleClassName?: string;
 }) {
   return (
-    <div className="mb-4">
-      <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+    <div className={cn("mb-4", className)}>
+      <h2
+        className={cn(
+          "text-base font-semibold text-slate-900 dark:text-slate-100",
+          titleClassName,
+        )}
+      >
         {children}
       </h2>
       {subtitle && (
-        <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+        <p
+          className={cn(
+            "mt-0.5 text-sm text-slate-500 dark:text-slate-400",
+            subtitleClassName,
+          )}
+        >
           {subtitle}
         </p>
       )}

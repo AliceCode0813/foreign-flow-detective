@@ -1,21 +1,18 @@
 import Link from "next/link";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
-import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
 import { OwnershipSparkline } from "@/components/dashboard/OwnershipSparkline";
-import type { ConsecutiveInflowEntry, MarketFilter } from "@/lib/types";
+import type { ConsecutiveInflowEntry } from "@/lib/types";
 import { cn, changeColor, formatChange, formatRatio } from "@/lib/utils";
 
 export function ConsecutiveStreakPanel({
   entries,
   tradeDate,
-  market,
   marketLabel,
   variant,
 }: {
   entries: ConsecutiveInflowEntry[];
   tradeDate: string | null;
-  market: MarketFilter;
   marketLabel: string;
   variant: "inflow" | "outflow";
 }) {
@@ -31,39 +28,36 @@ export function ConsecutiveStreakPanel({
     : "3일 이상 연속 지분 감소 종목이 없습니다.";
 
   return (
-    <Card>
+    <Card className="p-3 sm:p-4">
       <CardTitle
         subtitle={
-          tradeDate
-            ? `기준일 ${tradeDate} · ${marketLabel}`
-            : "데이터 없음"
+          tradeDate ? `기준일 ${tradeDate} · ${marketLabel}` : "데이터 없음"
         }
+        className="mb-2"
+        titleClassName="text-sm"
+        subtitleClassName="text-xs"
       >
-        <span className="flex items-center gap-2">
-          <Icon className={cn("h-4 w-4", iconClass)} />
+        <span className="flex items-center gap-1.5">
+          <Icon className={cn("h-3.5 w-3.5", iconClass)} />
           {title}
         </span>
       </CardTitle>
 
-      {isInflow && (
-        <div className="mb-4">
-          <MarketFilterLinks current={market} pathname="/" />
-        </div>
-      )}
-
       {entries.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">{emptyMsg}</p>
+        <p className="py-4 text-center text-xs text-slate-500">{emptyMsg}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[400px] text-sm">
+          <table className="w-full table-fixed text-xs">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-xs text-slate-500 dark:border-slate-800">
-                <th className="pb-2 pr-2 font-medium">#</th>
-                <th className="pb-2 pr-2 font-medium">종목</th>
-                <th className="pb-2 pr-2 text-center font-medium">연속</th>
-                <th className="pb-2 pr-2 font-medium">60일</th>
-                <th className="pb-2 pr-2 text-right font-medium">60일 변화</th>
-                <th className="pb-2 text-right font-medium">지분</th>
+              <tr className="border-b border-slate-100 text-left text-[10px] text-slate-500 dark:border-slate-800">
+                <th className="w-7 pb-1.5 pr-1 font-medium">#</th>
+                <th className="pb-1.5 pr-1 font-medium">종목</th>
+                <th className="w-11 pb-1.5 pr-1 text-center font-medium">연속</th>
+                <th className="hidden w-14 pb-1.5 pr-1 font-medium sm:table-cell">
+                  60일
+                </th>
+                <th className="w-[3.25rem] pb-1.5 pr-1 text-right font-medium">변화</th>
+                <th className="w-[3rem] pb-1.5 text-right font-medium">지분</th>
               </tr>
             </thead>
             <tbody>
@@ -72,38 +66,42 @@ export function ConsecutiveStreakPanel({
                   key={entry.code}
                   className="border-b border-slate-50 last:border-0 dark:border-slate-800/50"
                 >
-                  <td className="py-2.5 pr-2 font-bold text-slate-500">{i + 1}</td>
-                  <td className="py-2.5 pr-2">
+                  <td className="py-1.5 pr-1 font-bold text-slate-500">{i + 1}</td>
+                  <td className="max-w-0 py-1.5 pr-1">
                     <Link
                       href={`/stocks/${entry.code}`}
-                      className="font-medium text-slate-900 hover:text-blue-700 dark:text-slate-100"
+                      className="block truncate font-medium text-slate-900 hover:text-blue-700 dark:text-slate-100"
                     >
                       {entry.name}
                     </Link>
-                    <p className="text-[11px] text-slate-400">{entry.code}</p>
+                    <p className="truncate text-[10px] text-slate-400">{entry.code}</p>
                   </td>
-                  <td className="py-2.5 pr-2 text-center">
+                  <td className="py-1.5 pr-1 text-center">
                     <span
                       className={cn(
-                        "rounded-full px-2 py-0.5 text-xs font-bold",
+                        "inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
                         badgeClass,
                       )}
                     >
                       {entry.streakDays}일
                     </span>
                   </td>
-                  <td className="py-2.5 pr-2">
-                    <OwnershipSparkline data={entry.ratioHistory60d} />
+                  <td className="hidden py-1.5 pr-1 sm:table-cell">
+                    <OwnershipSparkline
+                      data={entry.ratioHistory60d}
+                      width={52}
+                      height={20}
+                    />
                   </td>
                   <td
                     className={cn(
-                      "py-2.5 pr-2 text-right font-semibold",
+                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
                       changeColor(entry.change60d),
                     )}
                   >
                     {formatChange(entry.change60d)}
                   </td>
-                  <td className="py-2.5 text-right text-slate-700 dark:text-slate-300">
+                  <td className="py-1.5 text-right text-[11px] tabular-nums text-slate-700 dark:text-slate-300">
                     {formatRatio(entry.currentRatio)}
                   </td>
                 </tr>

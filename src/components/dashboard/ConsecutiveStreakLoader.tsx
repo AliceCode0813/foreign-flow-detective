@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ConsecutiveStreakPanel } from "@/components/dashboard/ConsecutiveStreakPanel";
+import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
 import type { ConsecutiveInflowEntry, MarketFilter } from "@/lib/types";
 
 /** 연속 유입/유출 — /api/movers/consecutive (ingest 시 미리 계산된 streak) */
@@ -88,21 +89,24 @@ export function ConsecutiveStreakLoader({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <ConsecutiveStreakPanel
-        entries={inflow}
-        tradeDate={tradeDate}
-        market={market}
-        marketLabel={marketLabel}
-        variant="inflow"
-      />
-      <ConsecutiveStreakPanel
-        entries={outflow}
-        tradeDate={tradeDate}
-        market={market}
-        marketLabel={marketLabel}
-        variant="outflow"
-      />
-    </div>
+    <section>
+      <div className="mb-3">
+        <MarketFilterLinks current={market} pathname="/" />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ConsecutiveStreakPanel
+          entries={inflow}
+          tradeDate={tradeDate}
+          marketLabel={marketLabel}
+          variant="inflow"
+        />
+        <ConsecutiveStreakPanel
+          entries={outflow}
+          tradeDate={tradeDate}
+          marketLabel={marketLabel}
+          variant="outflow"
+        />
+      </div>
+    </section>
   );
 }
