@@ -407,13 +407,16 @@ def compute_rankings(cur, code: str):
         """
         INSERT INTO rankings_daily
           (id, stock_code, trade_date, change_1d, change_5d, change_20d, change_60d,
+           change_10d, change_30d,
            consecutive_up_days, consecutive_down_days, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (stock_code, trade_date) DO UPDATE SET
           change_1d = EXCLUDED.change_1d,
           change_5d = EXCLUDED.change_5d,
           change_20d = EXCLUDED.change_20d,
           change_60d = EXCLUDED.change_60d,
+          change_10d = EXCLUDED.change_10d,
+          change_30d = EXCLUDED.change_30d,
           consecutive_up_days = EXCLUDED.consecutive_up_days,
           consecutive_down_days = EXCLUDED.consecutive_down_days,
           created_at = NOW()
@@ -426,6 +429,8 @@ def compute_rankings(cur, code: str):
             calc_change(ratios, 5),
             calc_change(ratios, 20),
             calc_change(ratios, 60),
+            calc_change(ratios, 10),
+            calc_change(ratios, 30),
             streak_up,
             streak_down,
         ),

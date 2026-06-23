@@ -104,8 +104,9 @@ STREAK_INDEXES: list[tuple[str, str, str]] = [
 
 def get_url() -> str:
     env = read_env()
-    for key in ("DATABASE_URL", "LOCAL_DATABASE_URL"):
-        url = os.environ.get(key) or env.get(key, "").strip()
+    # ingest.py 와 동일: LOCAL_DATABASE_URL 우선 (로컬 개발)
+    for key in ("LOCAL_DATABASE_URL", "DATABASE_URL"):
+        url = (os.environ.get(key) or env.get(key, "")).strip()
         if url:
             return url
     return get_supabase_url()

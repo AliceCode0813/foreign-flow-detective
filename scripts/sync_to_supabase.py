@@ -40,6 +40,8 @@ TABLES: list[dict] = [
             "change_5d",
             "change_20d",
             "change_60d",
+            "change_10d",
+            "change_30d",
             "foreign_ratio_percentile",
             "consecutive_up_days",
             "consecutive_down_days",
@@ -348,6 +350,7 @@ def main() -> int:
                 "rankings_daily",
                 "stock_market_daily",
                 "stock_fundamental_daily",
+                "rankings_snapshot_daily",
             }:
                 continue
             print(f"  {spec['name']}...", flush=True)
