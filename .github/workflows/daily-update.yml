@@ -7,7 +7,7 @@
 #
 # 스케줄 참고:
 #   GitHub Actions cron은 UTC 기준. `47 11 * * 1-5` = 월~금 11:47 UTC = 20:47 KST.
-#   공개 repo 무료 tier에서는 지연·스킵이 발생할 수 있어 21:47 KST 백업 cron 추가.
+#   지연 시 중복 실행 방지: concurrency cancel-in-progress. 백업 cron은 겹침 유발해 제거.
 
 name: Daily data update
 
@@ -15,13 +15,11 @@ on:
   schedule:
     # 20:47 KST = 11:47 UTC, 월~금 (GitHub: 0=일, 1=월 … 5=금)
     - cron: "47 11 * * 1-5"
-    # 백업: 21:47 KST = 12:47 UTC (primary 실패·지연 대비)
-    - cron: "47 12 * * 1-5"
   workflow_dispatch:
 
 concurrency:
   group: daily-data-update
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   prepare:
@@ -76,7 +74,7 @@ jobs:
   ingest:
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -125,13 +123,14 @@ jobs:
         run: |
           python scripts/ingest.py \
             --market ${{ matrix.market }} \
-            --days 5 \
+            --days 14 \
             --delay 0.25 \
             --skip-fundamentals \
             --skip-snapshots
 
   finalize:
     needs: ingest
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

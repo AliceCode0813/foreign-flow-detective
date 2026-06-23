@@ -611,8 +611,14 @@ def main():
         if result.returncode != 0:
             print("[WARN] 스냅샷 계산 실패", file=sys.stderr)
 
-    if fail > ok:
+    if ok == 0:
+        print("[ERROR] 성공한 종목이 없습니다.", file=sys.stderr)
         sys.exit(1)
+    if fail > 0:
+        print(
+            f"[WARN] 일부 종목 실패 — 성공 {ok}, 실패 {fail} (성공분은 DB 반영됨)",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":
