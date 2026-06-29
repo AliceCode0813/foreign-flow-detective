@@ -1,9 +1,9 @@
 # Foreign Flow Detective — 평일 자동 업데이트 작업 등록
-# 기본: 월~금 20:47 (장 마감 후 KRX 데이터 반영 대기)
+# 기본: 월~토 05:17 (전일 장 데이터 — 아침 확인용)
 # 관리자 권한 불필요 (현재 사용자 계정으로 등록)
 
 param(
-    [string]$Time = "20:47"
+    [string]$Time = "05:17"
 )
 
 $ErrorActionPreference = "Stop"

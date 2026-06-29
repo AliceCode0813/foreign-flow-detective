@@ -1,4 +1,4 @@
-# 평일 20:47 KST — 종목 동기화 + KRX 수집 (Supabase 직접 반영)
+# 평일 05:17 KST — 전일 장 마감 데이터 수집 (Supabase 직접 반영)
 # KOSPI / KOSDAQ 병렬 수집, PER/PBR 생략, ingest 후 스냅샷·백분위 계산
 #
 # GitHub Secrets:
@@ -6,15 +6,16 @@
 #   DART_API_KEY (선택 — fetch_dart_overview weekly job)
 #
 # 스케줄 참고:
-#   GitHub Actions cron은 UTC 기준. `47 11 * * 1-5` = 월~금 11:47 UTC = 20:47 KST.
-#   지연 시 중복 실행 방지: concurrency cancel-in-progress. 백업 cron은 겹침 유발해 제거.
+#   GitHub Actions cron은 UTC. `17 20 * * 0-5` = KST 05:17 (월~토).
+#   전일 20:17 UTC → 당일 05:17 KST. KRX 반영·Actions 부하 모두 유리, 7~8시 전후 완료 목표.
+#   GitHub 지연 1~2h 가능 — 정각(:00) 피하려 :17 사용.
 
 name: Daily data update
 
 on:
   schedule:
-    # 20:47 KST = 11:47 UTC, 월~금 (GitHub: 0=일, 1=월 … 5=금)
-    - cron: "47 11 * * 1-5"
+    # 05:17 KST = 20:17 UTC(전일), 월~토 (금요일 장 → 토요일 아침 확인)
+    - cron: "17 20 * * 0-5"
   workflow_dispatch:
 
 concurrency:
