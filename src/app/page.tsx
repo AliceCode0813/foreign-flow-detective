@@ -70,11 +70,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </section>
 
           <section className="mb-8">
-            <Top10SnapshotSection snapshot={top10} marketLabel={rankMarketLabel} />
+            <StockSearch market={market} />
           </section>
 
           <section className="mb-8">
-            <StockSearch market={market} />
+            <Top10SnapshotSection snapshot={top10} marketLabel={rankMarketLabel} />
           </section>
 
           <section className="mb-8">
