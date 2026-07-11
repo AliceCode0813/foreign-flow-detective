@@ -1,19 +1,51 @@
+"use client";
+
 import Link from "next/link";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
-import type { InvestorStreakEntry } from "@/lib/types";
+import type { InvestorStreakEntry, RankingPeriod } from "@/lib/types";
 import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
+import type { PeriodView } from "@/components/dashboard/ConsecutiveStreakPanel";
+
+const PERIOD_LABELS: Record<Exclude<PeriodView, "all">, string> = {
+  "1d": "1일",
+  "5d": "5일",
+  "20d": "20일",
+  "60d": "60일",
+};
+
+function valueForPeriod(entry: InvestorStreakEntry, period: RankingPeriod): number {
+  if (period === "1d") return entry.change1d;
+  if (period === "5d") return entry.change5d;
+  if (period === "20d") return entry.change20d;
+  return entry.change60d;
+}
+
+function NetCell({ value }: { value: number }) {
+  return (
+    <td
+      className={cn(
+        "max-w-0 overflow-hidden py-1.5 pr-0.5 text-right text-[9px] font-semibold tabular-nums last:pr-0 sm:text-[10px]",
+        changeColor(value),
+      )}
+    >
+      <span className="block truncate">{formatNetValue(value)}</span>
+    </td>
+  );
+}
 
 export function InvestorConsecutiveStreakPanel({
   entries,
   tradeDate,
   marketLabel,
   variant,
+  periodView,
 }: {
   entries: InvestorStreakEntry[];
   tradeDate: string | null;
   marketLabel: string;
   variant: "inflow" | "outflow";
+  periodView: PeriodView;
 }) {
   const isInflow = variant === "inflow";
   const title = isInflow ? "연속 순매수 TOP 10" : "연속 순매도 TOP 10";
@@ -25,6 +57,9 @@ export function InvestorConsecutiveStreakPanel({
   const emptyMsg = isInflow
     ? "3일 이상 연속 순매수 종목이 없습니다."
     : "3일 이상 연속 순매도 종목이 없습니다.";
+  const showAll = periodView === "all";
+  const periodLabel =
+    periodView === "all" ? "" : PERIOD_LABELS[periodView];
 
   return (
     <Card className="p-3 sm:p-4">
@@ -45,17 +80,24 @@ export function InvestorConsecutiveStreakPanel({
       {entries.length === 0 ? (
         <p className="py-4 text-center text-xs text-slate-500">{emptyMsg}</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] text-xs">
+        <div className="-mx-0.5 overflow-x-auto px-0.5">
+          <table className="w-full min-w-0 table-fixed text-[11px]">
             <thead>
-              <tr className="border-b border-slate-100 text-left text-[10px] text-slate-500 dark:border-slate-800">
-                <th className="w-7 pb-1.5 pr-1 font-medium">#</th>
-                <th className="pb-1.5 pr-1 font-medium">종목</th>
-                <th className="w-11 pb-1.5 pr-1 text-center font-medium">연속</th>
-                <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">5일</th>
-                <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">20일</th>
-                <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">60일</th>
-                <th className="w-[3.25rem] pb-1.5 text-right font-medium">변화</th>
+              <tr className="border-b border-slate-100 text-left text-[9px] text-slate-500 dark:border-slate-800">
+                <th className="w-6 pb-1.5 pr-0.5 font-medium">#</th>
+                <th className="pb-1.5 pr-0.5 font-medium">종목</th>
+                <th className="w-9 pb-1.5 pr-0.5 text-center font-medium">연속</th>
+                {showAll ? (
+                  <>
+                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">1일</th>
+                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">5일</th>
+                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">20</th>
+                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">60</th>
+                  </>
+                ) : (
+                  <th className="w-14 pb-1.5 pr-0.5 text-right font-medium">{periodLabel}</th>
+                )}
+                <th className="w-11 pb-1.5 text-right font-medium">변화</th>
               </tr>
             </thead>
             <tbody>
@@ -64,53 +106,39 @@ export function InvestorConsecutiveStreakPanel({
                   key={entry.code}
                   className="border-b border-slate-50 last:border-0 dark:border-slate-800/50"
                 >
-                  <td className="py-1.5 pr-1 font-bold text-slate-500">{i + 1}</td>
-                  <td className="max-w-0 py-1.5 pr-1">
+                  <td className="py-1.5 pr-0.5 font-bold text-slate-500">{i + 1}</td>
+                  <td className="max-w-0 py-1.5 pr-0.5">
                     <Link
                       href={`/stocks/${entry.code}`}
                       className="block truncate font-medium text-slate-900 hover:text-blue-700 dark:text-slate-100"
                     >
                       {entry.name}
                     </Link>
-                    <p className="truncate text-[10px] text-slate-400">{entry.code}</p>
+                    <p className="truncate text-[9px] text-slate-400">{entry.code}</p>
                   </td>
-                  <td className="py-1.5 pr-1 text-center">
+                  <td className="py-1.5 pr-0.5 text-center">
                     <span
                       className={cn(
-                        "inline-block rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
+                        "inline-block rounded-full px-1 py-0.5 text-[9px] font-bold leading-none",
                         badgeClass,
                       )}
                     >
                       {entry.streakDays}일
                     </span>
                   </td>
+                  {showAll ? (
+                    <>
+                      <NetCell value={entry.change1d} />
+                      <NetCell value={entry.change5d} />
+                      <NetCell value={entry.change20d} />
+                      <NetCell value={entry.change60d} />
+                    </>
+                  ) : (
+                    <NetCell value={valueForPeriod(entry, periodView)} />
+                  )}
                   <td
                     className={cn(
-                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
-                      changeColor(entry.change5d),
-                    )}
-                  >
-                    {formatNetValue(entry.change5d)}
-                  </td>
-                  <td
-                    className={cn(
-                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
-                      changeColor(entry.change20d),
-                    )}
-                  >
-                    {formatNetValue(entry.change20d)}
-                  </td>
-                  <td
-                    className={cn(
-                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
-                      changeColor(entry.change60d),
-                    )}
-                  >
-                    {formatNetValue(entry.change60d)}
-                  </td>
-                  <td
-                    className={cn(
-                      "py-1.5 text-right text-[11px] font-semibold tabular-nums",
+                      "whitespace-nowrap py-1.5 text-right text-[10px] font-semibold tabular-nums",
                       entry.ownershipChange60d != null
                         ? changeColor(entry.ownershipChange60d)
                         : "text-slate-400",
