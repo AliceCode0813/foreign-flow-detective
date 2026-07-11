@@ -20,6 +20,11 @@ export interface PeriodTopBottom {
   tradeDate: string | null;
 }
 
+function toNum(value: bigint | number | null | undefined): number {
+  if (value == null) return 0;
+  return typeof value === "bigint" ? Number(value) : value;
+}
+
 function mapRankingRows(
   rows: Awaited<ReturnType<typeof queryRankings>>,
   field: "change1d" | "change5d" | "change20d" | "change60d",
@@ -32,6 +37,9 @@ function mapRankingRows(
     currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
     change: row[field] ?? 0,
     netPurchase: null,
+    netPurchase5d: null,
+    netPurchase20d: null,
+    netPurchase60d: null,
     foreignRatioPercentile: row.foreignRatioPercentile ?? null,
     tradeDate: row.tradeDate,
   }));
@@ -61,15 +69,27 @@ async function attachForeignNetPurchase(
       },
     });
     const byCode = new Map(
-      rows.map((r) => {
-        const v = r[field];
-        return [r.stockCode, typeof v === "bigint" ? Number(v) : Number(v ?? 0)] as const;
-      }),
+      rows.map((r) => [
+        r.stockCode,
+        {
+          change1d: toNum(r.change1d),
+          change5d: toNum(r.change5d),
+          change20d: toNum(r.change20d),
+          change60d: toNum(r.change60d),
+        },
+      ]),
     );
-    return entries.map((e) => ({
-      ...e,
-      netPurchase: byCode.has(e.code) ? byCode.get(e.code)! : null,
-    }));
+    return entries.map((e) => {
+      const n = byCode.get(e.code);
+      if (!n) return e;
+      return {
+        ...e,
+        netPurchase: n[field],
+        netPurchase5d: n.change5d,
+        netPurchase20d: n.change20d,
+        netPurchase60d: n.change60d,
+      };
+    });
   } catch {
     return entries;
   }
@@ -144,7 +164,7 @@ export async function getTop10Snapshot(
 ): Promise<PeriodTopBottom> {
   return unstable_cache(
     () => fetchTop10Snapshot(period, market),
-    ["top10-snapshot", period, market, "v2"],
+    ["top10-snapshot", period, market, "v3"],
     { revalidate: 600 },
   )();
 }
@@ -201,6 +221,9 @@ async function fetchTop10Snapshot(
       currentRatio: row.currentRatio,
       change: row.change,
       netPurchase: null,
+      netPurchase5d: null,
+      netPurchase20d: null,
+      netPurchase60d: null,
       foreignRatioPercentile: row.foreignRatioPercentile,
       tradeDate: row.tradeDate,
     });

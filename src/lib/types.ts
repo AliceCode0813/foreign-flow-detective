@@ -145,8 +145,12 @@ export interface RankingEntry {
   currentRatio: number;
   /** 기간 지분 변화 (%p) */
   change: number;
-  /** 동일 기간 외국인 누적 순매수 (원), 없으면 null */
+  /** 선택 기간 외국인 누적 순매수 (원), 없으면 null */
   netPurchase: number | null;
+  /** 5/20/60일 외국인 누적 순매수 (원) */
+  netPurchase5d: number | null;
+  netPurchase20d: number | null;
+  netPurchase60d: number | null;
   foreignRatioPercentile: number | null;
   tradeDate: string;
 }
@@ -158,8 +162,11 @@ export interface InvestorRankingEntry {
   name: string;
   market: string;
   currentValue: number;
-  /** 기간 누적 순매수 (원) */
+  /** 선택 기간 누적 순매수 (원) */
   change: number;
+  change5d: number;
+  change20d: number;
+  change60d: number;
   /** 동일 기간 외국인 지분 변화 (%p) */
   ownershipChange: number | null;
   tradeDate: string;

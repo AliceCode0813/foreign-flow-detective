@@ -46,17 +46,16 @@ export function InvestorConsecutiveStreakPanel({
         <p className="py-4 text-center text-xs text-slate-500">{emptyMsg}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-xs">
+          <table className="w-full min-w-[420px] text-xs">
             <thead>
               <tr className="border-b border-slate-100 text-left text-[10px] text-slate-500 dark:border-slate-800">
                 <th className="w-7 pb-1.5 pr-1 font-medium">#</th>
                 <th className="pb-1.5 pr-1 font-medium">종목</th>
                 <th className="w-11 pb-1.5 pr-1 text-center font-medium">연속</th>
-                <th className="hidden w-14 pb-1.5 pr-1 font-medium sm:table-cell">
-                  60일
-                </th>
-                <th className="w-[3.25rem] pb-1.5 pr-1 text-right font-medium">변화</th>
-                <th className="w-[3.5rem] pb-1.5 text-right font-medium">누적</th>
+                <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">5일</th>
+                <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">20일</th>
+                <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">60일</th>
+                <th className="w-[3.25rem] pb-1.5 text-right font-medium">변화</th>
               </tr>
             </thead>
             <tbody>
@@ -87,7 +86,23 @@ export function InvestorConsecutiveStreakPanel({
                   </td>
                   <td
                     className={cn(
-                      "hidden py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums sm:table-cell",
+                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
+                      changeColor(entry.change5d),
+                    )}
+                  >
+                    {formatNetValue(entry.change5d)}
+                  </td>
+                  <td
+                    className={cn(
+                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
+                      changeColor(entry.change20d),
+                    )}
+                  >
+                    {formatNetValue(entry.change20d)}
+                  </td>
+                  <td
+                    className={cn(
+                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
                       changeColor(entry.change60d),
                     )}
                   >
@@ -95,7 +110,7 @@ export function InvestorConsecutiveStreakPanel({
                   </td>
                   <td
                     className={cn(
-                      "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
+                      "py-1.5 text-right text-[11px] font-semibold tabular-nums",
                       entry.ownershipChange60d != null
                         ? changeColor(entry.ownershipChange60d)
                         : "text-slate-400",
@@ -104,14 +119,6 @@ export function InvestorConsecutiveStreakPanel({
                     {entry.ownershipChange60d != null
                       ? formatChange(entry.ownershipChange60d)
                       : "—"}
-                  </td>
-                  <td
-                    className={cn(
-                      "py-1.5 text-right text-[11px] font-semibold tabular-nums",
-                      changeColor(entry.change60d),
-                    )}
-                  >
-                    {formatNetValue(entry.change60d)}
                   </td>
                 </tr>
               ))}

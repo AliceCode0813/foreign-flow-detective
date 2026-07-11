@@ -41,6 +41,9 @@ function mapInvestorRankingRows(
     market: row.stock.market,
     currentValue: toNumber(row.stock.investorTrading[0]?.netValue),
     change: toNumber(row[field]),
+    change5d: toNumber(row.change5d),
+    change20d: toNumber(row.change20d),
+    change60d: toNumber(row.change60d),
     ownershipChange: null,
     tradeDate: row.tradeDate,
   }));
@@ -70,6 +73,38 @@ async function attachOwnershipChange(
       ...e,
       ownershipChange: byCode.has(e.code) ? byCode.get(e.code)! : null,
     }));
+  } catch {
+    return entries;
+  }
+}
+
+async function attachInvestorPeriodNets(
+  entries: InvestorRankingEntry[],
+  investorType: InvestorType,
+  tradeDate: string,
+): Promise<InvestorRankingEntry[]> {
+  if (entries.length === 0) return entries;
+  const codes = entries.map((e) => e.code);
+  try {
+    const rows = await prisma.investorRankingDaily.findMany({
+      where: { tradeDate, stockCode: { in: codes }, investorType },
+      select: {
+        stockCode: true,
+        change5d: true,
+        change20d: true,
+        change60d: true,
+      },
+    });
+    const byCode = new Map(rows.map((r) => [r.stockCode, r]));
+    return entries.map((e) => {
+      const row = byCode.get(e.code);
+      return {
+        ...e,
+        change5d: row ? toNumber(row.change5d) : e.change5d,
+        change20d: row ? toNumber(row.change20d) : e.change20d,
+        change60d: row ? toNumber(row.change60d) : e.change60d,
+      };
+    });
   } catch {
     return entries;
   }
@@ -190,7 +225,7 @@ export async function getInvestorTop10Snapshot(
 ): Promise<InvestorPeriodTopBottom> {
   return unstable_cache(
     () => fetchInvestorTop10Snapshot(investorType, period, market),
-    ["investor-top10-snapshot", investorType, period, market, "v2"],
+    ["investor-top10-snapshot", investorType, period, market, "v3"],
     { revalidate: 600 },
   )();
 }
@@ -257,14 +292,19 @@ async function fetchInvestorTop10Snapshot(
       market: row.stock.market,
       currentValue: toNumber(row.currentValue),
       change: toNumber(row.change),
+      change5d: 0,
+      change20d: 0,
+      change60d: 0,
       ownershipChange: null,
       tradeDate: row.tradeDate,
     });
 
-    const [top, bottom] = await Promise.all([
-      attachOwnershipChange(topRows.map(mapRow), period, latestDate),
-      attachOwnershipChange(bottomRows.map(mapRow), period, latestDate),
-    ]);
+    const enrich = async (rows: typeof topRows) => {
+      const withOwn = await attachOwnershipChange(rows.map(mapRow), period, latestDate);
+      return attachInvestorPeriodNets(withOwn, investorType, latestDate);
+    };
+
+    const [top, bottom] = await Promise.all([enrich(topRows), enrich(bottomRows)]);
 
     return {
       top,
@@ -305,7 +345,7 @@ export async function getAllPeriodInvestorRankings(
 ) {
   return unstable_cache(
     () => fetchAllPeriodInvestorRankings(investorType, limit, market),
-    ["all-period-investor-rankings", investorType, String(limit), market, "v2"],
+    ["all-period-investor-rankings", investorType, String(limit), market, "v3"],
     { revalidate: 600 },
   )();
 }
