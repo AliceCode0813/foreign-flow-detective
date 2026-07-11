@@ -89,6 +89,28 @@ TABLES: list[dict] = [
         "conflict": ["trade_date", "market", "period", "direction", "rank"],
         "update": ["stock_code", "change", "current_ratio", "foreign_ratio_percentile"],
     },
+    {
+        "name": "investor_trading_daily",
+        "conflict": ["stock_code", "trade_date", "investor_type"],
+        "update": ["net_value", "source"],
+    },
+    {
+        "name": "investor_rankings_daily",
+        "conflict": ["stock_code", "trade_date", "investor_type"],
+        "update": [
+            "change_1d",
+            "change_5d",
+            "change_20d",
+            "change_60d",
+            "consecutive_up_days",
+            "consecutive_down_days",
+        ],
+    },
+    {
+        "name": "investor_rankings_snapshot_daily",
+        "conflict": ["trade_date", "market", "period", "direction", "investor_type", "rank"],
+        "update": ["stock_code", "change", "current_value"],
+    },
 ]
 
 
@@ -351,6 +373,9 @@ def main() -> int:
                 "stock_market_daily",
                 "stock_fundamental_daily",
                 "rankings_snapshot_daily",
+                "investor_trading_daily",
+                "investor_rankings_daily",
+                "investor_rankings_snapshot_daily",
             }:
                 continue
             print(f"  {spec['name']}...", flush=True)

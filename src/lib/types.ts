@@ -4,6 +4,9 @@ export type RankingPeriod = "1d" | "5d" | "20d" | "60d";
 /** 시장 필터: 코스피 / 코스닥 / 전체 */
 export type MarketFilter = "KOSPI" | "KOSDAQ" | "ALL";
 
+/** 투자자 유형: 기관 / 개인 */
+export type InvestorType = "INSTITUTION" | "INDIVIDUAL";
+
 /** 종목 요약 (대시보드·목록) */
 export interface StockSummary {
   code: string;
@@ -143,6 +146,31 @@ export interface RankingEntry {
   change: number;
   foreignRatioPercentile: number | null;
   tradeDate: string;
+}
+
+/** 투자자 순매수 랭킹 항목 */
+export interface InvestorRankingEntry {
+  rank: number;
+  code: string;
+  name: string;
+  market: string;
+  currentValue: number;
+  change: number;
+  tradeDate: string;
+}
+
+/** 투자자 연속 순매수 종목 */
+export interface InvestorStreakEntry {
+  code: string;
+  name: string;
+  market: string;
+  currentValue: number;
+  change1d: number;
+  change5d: number;
+  change20d: number;
+  change60d: number;
+  streakDays: number;
+  lastTradeDate: string;
 }
 
 /** 대시보드 통계 */

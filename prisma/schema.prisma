@@ -27,6 +27,9 @@ model Stock {
   alerts      Alert[]
   watchlist   Watchlist?
   rankingSnapshots RankingSnapshotDaily[]
+  investorTrading InvestorTradingDaily[]
+  investorRankings InvestorRankingDaily[]
+  investorRankingSnapshots InvestorRankingSnapshotDaily[]
 
   @@map("stocks")
 }
@@ -157,6 +160,71 @@ model Alert {
   @@index([createdAt])
   @@index([alertType])
   @@map("alerts")
+}
+
+/// 일별 투자자별 순매수거래대금 (pykrx 수집)
+model InvestorTradingDaily {
+  id           String   @id @default(cuid())
+  stockCode    String   @map("stock_code") @db.VarChar(6)
+  tradeDate    String   @map("trade_date") @db.VarChar(10)
+  investorType String   @map("investor_type") @db.VarChar(20)
+  netValue     BigInt   @map("net_value")
+  source       String   @default("pykrx") @db.VarChar(30)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([stockCode, tradeDate, investorType])
+  @@index([stockCode, tradeDate])
+  @@index([tradeDate, investorType])
+  @@map("investor_trading_daily")
+}
+
+/// 투자자별 기간 순매수 합계 (ingest 시 사전 계산)
+model InvestorRankingDaily {
+  id                  String   @id @default(cuid())
+  stockCode           String   @map("stock_code") @db.VarChar(6)
+  tradeDate           String   @map("trade_date") @db.VarChar(10)
+  investorType        String   @map("investor_type") @db.VarChar(20)
+  change1d            BigInt   @default(0) @map("change_1d")
+  change5d            BigInt   @default(0) @map("change_5d")
+  change20d           BigInt   @default(0) @map("change_20d")
+  change60d           BigInt   @map("change_60d")
+  consecutiveUpDays   Int      @default(0) @map("consecutive_up_days")
+  consecutiveDownDays Int      @default(0) @map("consecutive_down_days")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([stockCode, tradeDate, investorType])
+  @@index([tradeDate, investorType, change1d])
+  @@index([tradeDate, investorType, change5d])
+  @@index([tradeDate, investorType, change20d])
+  @@index([tradeDate, investorType, change60d])
+  @@index([tradeDate, investorType, consecutiveUpDays], map: "investor_rankings_daily_consecutive_up_idx")
+  @@index([tradeDate, investorType, consecutiveDownDays], map: "investor_rankings_daily_consecutive_down_idx")
+  @@map("investor_rankings_daily")
+}
+
+/// 투자자별 TOP10 랭킹 스냅샷 (웹 즉시 조회용)
+model InvestorRankingSnapshotDaily {
+  id           String   @id @default(cuid())
+  tradeDate    String   @map("trade_date") @db.VarChar(10)
+  market       String   @db.VarChar(20)
+  period       String   @db.VarChar(4)
+  direction    String   @db.VarChar(6)
+  investorType String   @map("investor_type") @db.VarChar(20)
+  rank         Int
+  stockCode    String   @map("stock_code") @db.VarChar(6)
+  change       BigInt
+  currentValue BigInt   @map("current_value")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  stock Stock @relation(fields: [stockCode], references: [code], onDelete: Cascade)
+
+  @@unique([tradeDate, market, period, direction, investorType, rank])
+  @@index([tradeDate, market, period, direction, investorType])
+  @@map("investor_rankings_snapshot_daily")
 }
 
 /// 사용자 즐겨찾기 (관심 종목)

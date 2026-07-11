@@ -217,6 +217,151 @@ def fetch_fundamental_rows(code: str, start: str, end: str) -> list[dict[str, An
     return rows
 
 
+INVESTOR_TYPE_MAP = {
+    "기관합계": "INSTITUTION",
+    "개인": "INDIVIDUAL",
+}
+
+
+def fetch_investor_trading_rows(code: str, start: str, end: str) -> list[dict[str, Any]]:
+    from pykrx import stock
+
+    df = stock.get_market_trading_value_by_date(start, end, code, on="순매수")
+    if df is None or df.empty:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for idx, row in df.iterrows():
+        date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, "strftime") else str(idx)[:10]
+        for col, investor_type in INVESTOR_TYPE_MAP.items():
+            if col not in df.columns:
+                continue
+            val = row[col]
+            if val is None or (isinstance(val, float) and val != val):
+                continue
+            rows.append(
+                {
+                    "trade_date": date_str,
+                    "investor_type": investor_type,
+                    "net_value": int(val),
+                }
+            )
+    return rows
+
+
+def upsert_investor_trading(cur, code: str, rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+
+    values = [
+        (
+            str(uuid.uuid4()).replace("-", "")[:25],
+            code,
+            r["trade_date"],
+            r["investor_type"],
+            r["net_value"],
+            "pykrx",
+            datetime.utcnow(),
+        )
+        for r in rows
+    ]
+
+    execute_values(
+        cur,
+        """
+        INSERT INTO investor_trading_daily
+          (id, stock_code, trade_date, investor_type, net_value, source, created_at)
+        VALUES %s
+        ON CONFLICT (stock_code, trade_date, investor_type) DO UPDATE SET
+          net_value = EXCLUDED.net_value,
+          source = EXCLUDED.source,
+          created_at = EXCLUDED.created_at
+        """,
+        values,
+    )
+    return len(values)
+
+
+def calc_net_sum(values: list[int], days: int) -> int:
+    if not values:
+        return 0
+    tail = values[-days:] if len(values) >= days else values
+    return int(sum(tail))
+
+
+def count_consecutive_positive(values: list[int]) -> int:
+    if not values:
+        return 0
+    count = 0
+    for i in range(len(values) - 1, -1, -1):
+        if values[i] > 0:
+            count += 1
+        else:
+            break
+    return count
+
+
+def count_consecutive_negative(values: list[int]) -> int:
+    if not values:
+        return 0
+    count = 0
+    for i in range(len(values) - 1, -1, -1):
+        if values[i] < 0:
+            count += 1
+        else:
+            break
+    return count
+
+
+def compute_investor_rankings(cur, code: str, investor_type: str):
+    cur.execute(
+        """
+        SELECT trade_date, net_value
+        FROM investor_trading_daily
+        WHERE stock_code = %s AND investor_type = %s
+        ORDER BY trade_date ASC
+        """,
+        (code, investor_type),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return
+
+    net_values = [int(r[1]) for r in rows]
+    latest_date = rows[-1][0]
+    streak_up = count_consecutive_positive(net_values)
+    streak_down = count_consecutive_negative(net_values)
+
+    cur.execute(
+        """
+        INSERT INTO investor_rankings_daily
+          (id, stock_code, trade_date, investor_type, change_1d, change_5d, change_20d, change_60d,
+           consecutive_up_days, consecutive_down_days, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (stock_code, trade_date, investor_type) DO UPDATE SET
+          change_1d = EXCLUDED.change_1d,
+          change_5d = EXCLUDED.change_5d,
+          change_20d = EXCLUDED.change_20d,
+          change_60d = EXCLUDED.change_60d,
+          consecutive_up_days = EXCLUDED.consecutive_up_days,
+          consecutive_down_days = EXCLUDED.consecutive_down_days,
+          created_at = NOW()
+        """,
+        (
+            str(uuid.uuid4()).replace("-", "")[:25],
+            code,
+            latest_date,
+            investor_type,
+            net_values[-1],
+            calc_net_sum(net_values, 5),
+            calc_net_sum(net_values, 20),
+            calc_net_sum(net_values, 60),
+            streak_up,
+            streak_down,
+        ),
+    )
+
+
 def upsert_stock(cur, code: str, name: str, market: str):
     cur.execute(
         """
@@ -446,14 +591,15 @@ def ingest_one(
     end_str: str,
     with_alerts: bool,
     skip_fundamentals: bool = False,
-) -> tuple[int, int, bool]:
-    """단일 종목 수집. (지분건수, 시세건수, 성공여부)"""
+    skip_investor: bool = False,
+) -> tuple[int, int, int, bool]:
+    """단일 종목 수집. (지분건수, 시세건수, 투자자건수, 성공여부)"""
     upsert_stock(cur, code, name, market)
     own_rows = fetch_foreign_rows(code, start_str, end_str)
     mkt_rows = fetch_market_rows(code, start_str, end_str)
 
     if not own_rows:
-        return 0, 0, False
+        return 0, 0, 0, False
 
     own_n = upsert_ownership(cur, code, own_rows)
     mkt_n = upsert_market(cur, code, mkt_rows)
@@ -462,10 +608,17 @@ def ingest_one(
         upsert_fundamentals(cur, code, fund_rows)
     compute_rankings(cur, code)
 
+    inv_n = 0
+    if not skip_investor:
+        inv_rows = fetch_investor_trading_rows(code, start_str, end_str)
+        inv_n = upsert_investor_trading(cur, code, inv_rows)
+        for investor_type in INVESTOR_TYPE_MAP.values():
+            compute_investor_rankings(cur, code, investor_type)
+
     if with_alerts:
         evaluate_alerts(cur, code, name)
 
-    return own_n, mkt_n, True
+    return own_n, mkt_n, inv_n, True
 
 
 def evaluate_alerts(cur, code: str, stock_name: str) -> int:
@@ -540,6 +693,11 @@ def main():
         action="store_true",
         help="ingest 후 백분위·TOP10 스냅샷 생략 (CI 병렬 ingest 시 finalize에서 실행)",
     )
+    parser.add_argument(
+        "--skip-investor",
+        action="store_true",
+        help="기관·개인 순매수 수집 생략",
+    )
     args = parser.parse_args()
 
     if not os.environ.get("KRX_ID") or not os.environ.get("KRX_PW"):
@@ -559,6 +717,7 @@ def main():
     conn = get_connection()
     total_own = 0
     total_mkt = 0
+    total_inv = 0
     ok = 0
     fail = 0
 
@@ -567,7 +726,7 @@ def main():
             with conn.cursor() as cur:
                 for i, (code, name, market) in enumerate(universe, 1):
                     try:
-                        own_n, mkt_n, success = ingest_one(
+                        own_n, mkt_n, inv_n, success = ingest_one(
                             cur,
                             code,
                             name,
@@ -576,18 +735,20 @@ def main():
                             end_str,
                             args.with_alerts,
                             args.skip_fundamentals,
+                            args.skip_investor,
                         )
                         if success:
                             ok += 1
                             total_own += own_n
                             total_mkt += mkt_n
+                            total_inv += inv_n
                         else:
                             fail += 1
 
                         if i % 50 == 0 or i == total_stocks:
                             print(
                                 f"[{i}/{total_stocks}] 진행중... "
-                                f"성공 {ok} / 실패 {fail} / 지분 {total_own}건",
+                                f"성공 {ok} / 실패 {fail} / 지분 {total_own}건 / 투자자 {total_inv}건",
                                 flush=True,
                             )
                         conn.commit()
@@ -601,7 +762,10 @@ def main():
     finally:
         conn.close()
 
-    print(f"\n[DONE] 성공 {ok}, 실패 {fail}, 지분 {total_own}건, 시세 {total_mkt}건", flush=True)
+    print(
+        f"\n[DONE] 성공 {ok}, 실패 {fail}, 지분 {total_own}건, 시세 {total_mkt}건, 투자자 {total_inv}건",
+        flush=True,
+    )
 
     if ok > 0 and not args.skip_snapshots:
         import subprocess

@@ -1,0 +1,363 @@
+import { unstable_cache } from "next/cache";
+import { prisma } from "@/lib/db";
+import { marketWhereClause } from "@/lib/market";
+import type {
+  InvestorRankingEntry,
+  InvestorStreakEntry,
+  InvestorType,
+  MarketFilter,
+  RankingPeriod,
+} from "@/lib/types";
+
+const PERIOD_FIELD: Record<
+  RankingPeriod,
+  "change1d" | "change5d" | "change20d" | "change60d"
+> = {
+  "1d": "change1d",
+  "5d": "change5d",
+  "20d": "change20d",
+  "60d": "change60d",
+};
+
+export interface InvestorPeriodTopBottom {
+  top: InvestorRankingEntry[];
+  bottom: InvestorRankingEntry[];
+  tradeDate: string | null;
+}
+
+function toNumber(value: bigint | number | null | undefined): number {
+  if (value == null) return 0;
+  return typeof value === "bigint" ? Number(value) : value;
+}
+
+function mapInvestorRankingRows(
+  rows: Awaited<ReturnType<typeof queryInvestorRankings>>,
+  field: "change1d" | "change5d" | "change20d" | "change60d",
+): InvestorRankingEntry[] {
+  return rows.map((row, i) => ({
+    rank: i + 1,
+    code: row.stockCode,
+    name: row.stock.name,
+    market: row.stock.market,
+    currentValue: toNumber(row.stock.investorTrading[0]?.netValue),
+    change: toNumber(row[field]),
+    tradeDate: row.tradeDate,
+  }));
+}
+
+async function queryInvestorRankings(
+  latestDate: string,
+  investorType: InvestorType,
+  period: RankingPeriod,
+  limit: number,
+  market: MarketFilter,
+  direction: "desc" | "asc",
+) {
+  const field = PERIOD_FIELD[period];
+  return prisma.investorRankingDaily.findMany({
+    where: {
+      tradeDate: latestDate,
+      investorType,
+      stock: marketWhereClause(market),
+    },
+    select: {
+      stockCode: true,
+      tradeDate: true,
+      change1d: true,
+      change5d: true,
+      change20d: true,
+      change60d: true,
+      stock: {
+        select: {
+          name: true,
+          market: true,
+          investorTrading: {
+            where: { tradeDate: latestDate, investorType },
+            take: 1,
+            select: { netValue: true },
+          },
+        },
+      },
+    },
+    orderBy: { [field]: direction },
+    take: limit,
+  });
+}
+
+async function getLatestInvestorTradeDate(): Promise<string | null> {
+  const row = await prisma.investorRankingDaily.findFirst({
+    orderBy: { tradeDate: "desc" },
+    select: { tradeDate: true },
+  });
+  return row?.tradeDate ?? null;
+}
+
+export async function getMinimalInvestorDashboardMeta(
+  investorType: InvestorType,
+): Promise<{
+  hasData: boolean;
+  lastUpdated: string;
+  trackedCount: number;
+}> {
+  const latestDate = await getLatestInvestorTradeDate();
+  if (!latestDate) {
+    return { hasData: false, lastUpdated: "데이터 없음", trackedCount: 0 };
+  }
+  const trackedCount = await prisma.investorRankingDaily.count({
+    where: { tradeDate: latestDate, investorType },
+  });
+  return {
+    hasData: trackedCount > 0,
+    lastUpdated: latestDate,
+    trackedCount,
+  };
+}
+
+async function fetchTopBottomForDate(
+  latestDate: string,
+  investorType: InvestorType,
+  period: RankingPeriod,
+  limit: number,
+  market: MarketFilter,
+): Promise<InvestorPeriodTopBottom> {
+  const field = PERIOD_FIELD[period];
+  const [topRows, bottomRows] = await Promise.all([
+    queryInvestorRankings(latestDate, investorType, period, limit, market, "desc"),
+    queryInvestorRankings(latestDate, investorType, period, limit, market, "asc"),
+  ]);
+
+  return {
+    top: mapInvestorRankingRows(topRows, field),
+    bottom: mapInvestorRankingRows(bottomRows, field),
+    tradeDate: latestDate,
+  };
+}
+
+export async function getInvestorTop10Snapshot(
+  investorType: InvestorType,
+  period: RankingPeriod = "60d",
+  market: MarketFilter = "ALL",
+): Promise<InvestorPeriodTopBottom> {
+  return unstable_cache(
+    () => fetchInvestorTop10Snapshot(investorType, period, market),
+    ["investor-top10-snapshot", investorType, period, market],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchInvestorTop10Snapshot(
+  investorType: InvestorType,
+  period: RankingPeriod,
+  market: MarketFilter,
+): Promise<InvestorPeriodTopBottom> {
+  const latestDate = await getLatestInvestorTradeDate();
+  const empty: InvestorPeriodTopBottom = { top: [], bottom: [], tradeDate: null };
+  if (!latestDate) return empty;
+
+  try {
+    const [topRows, bottomRows] = await Promise.all([
+      prisma.investorRankingSnapshotDaily.findMany({
+        where: {
+          tradeDate: latestDate,
+          market,
+          period,
+          direction: "top",
+          investorType,
+        },
+        orderBy: { rank: "asc" },
+        take: 10,
+        select: {
+          rank: true,
+          stockCode: true,
+          change: true,
+          currentValue: true,
+          tradeDate: true,
+          stock: { select: { name: true, market: true } },
+        },
+      }),
+      prisma.investorRankingSnapshotDaily.findMany({
+        where: {
+          tradeDate: latestDate,
+          market,
+          period,
+          direction: "bottom",
+          investorType,
+        },
+        orderBy: { rank: "asc" },
+        take: 10,
+        select: {
+          rank: true,
+          stockCode: true,
+          change: true,
+          currentValue: true,
+          tradeDate: true,
+          stock: { select: { name: true, market: true } },
+        },
+      }),
+    ]);
+
+    if (topRows.length === 0) {
+      return fetchTopBottomForDate(latestDate, investorType, period, 10, market);
+    }
+
+    const mapRow = (row: (typeof topRows)[0]): InvestorRankingEntry => ({
+      rank: row.rank,
+      code: row.stockCode,
+      name: row.stock.name,
+      market: row.stock.market,
+      currentValue: toNumber(row.currentValue),
+      change: toNumber(row.change),
+      tradeDate: row.tradeDate,
+    });
+
+    return {
+      top: topRows.map(mapRow),
+      bottom: bottomRows.map(mapRow),
+      tradeDate: latestDate,
+    };
+  } catch (error) {
+    console.error("[investor-ranking-service] getInvestorTop10Snapshot", error);
+    return fetchTopBottomForDate(latestDate, investorType, period, 10, market);
+  }
+}
+
+async function fetchAllPeriodInvestorRankings(
+  investorType: InvestorType,
+  limit: number,
+  market: MarketFilter,
+) {
+  const latestDate = await getLatestInvestorTradeDate();
+  const empty: InvestorPeriodTopBottom = { top: [], bottom: [], tradeDate: null };
+  if (!latestDate) {
+    return { "1d": empty, "5d": empty, "20d": empty, "60d": empty };
+  }
+
+  const [r1, r5, r20, r60] = await Promise.all([
+    fetchTopBottomForDate(latestDate, investorType, "1d", limit, market),
+    fetchTopBottomForDate(latestDate, investorType, "5d", limit, market),
+    fetchTopBottomForDate(latestDate, investorType, "20d", limit, market),
+    fetchTopBottomForDate(latestDate, investorType, "60d", limit, market),
+  ]);
+
+  return { "1d": r1, "5d": r5, "20d": r20, "60d": r60 };
+}
+
+export async function getAllPeriodInvestorRankings(
+  investorType: InvestorType,
+  limit = 15,
+  market: MarketFilter = "ALL",
+) {
+  return unstable_cache(
+    () => fetchAllPeriodInvestorRankings(investorType, limit, market),
+    ["all-period-investor-rankings", investorType, String(limit), market],
+    { revalidate: 300 },
+  )();
+}
+
+export async function getInvestorConsecutiveStreakTops(
+  investorType: InvestorType,
+  market: MarketFilter = "ALL",
+  limit = 10,
+  minStreak = 3,
+): Promise<{
+  inflow: InvestorStreakEntry[];
+  outflow: InvestorStreakEntry[];
+  tradeDate: string | null;
+}> {
+  return unstable_cache(
+    () => fetchInvestorConsecutiveStreakTops(investorType, market, limit, minStreak),
+    ["investor-consecutive-streak", investorType, market, String(limit), String(minStreak)],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchInvestorConsecutiveStreakTops(
+  investorType: InvestorType,
+  market: MarketFilter,
+  limit: number,
+  minStreak: number,
+): Promise<{
+  inflow: InvestorStreakEntry[];
+  outflow: InvestorStreakEntry[];
+  tradeDate: string | null;
+}> {
+  const tradeDate = await getLatestInvestorTradeDate();
+  if (!tradeDate) {
+    return { inflow: [], outflow: [], tradeDate: null };
+  }
+
+  try {
+    const marketFilter = marketWhereClause(market);
+    const rowSelect = {
+      stockCode: true,
+      change1d: true,
+      change5d: true,
+      change20d: true,
+      change60d: true,
+      consecutiveUpDays: true,
+      consecutiveDownDays: true,
+      stock: {
+        select: {
+          code: true,
+          name: true,
+          market: true,
+          investorTrading: {
+            where: { tradeDate, investorType },
+            take: 1,
+            select: { netValue: true },
+          },
+        },
+      },
+    } as const;
+
+    const [inflowRows, outflowRows] = await Promise.all([
+      prisma.investorRankingDaily.findMany({
+        where: {
+          tradeDate,
+          investorType,
+          consecutiveUpDays: { gte: minStreak },
+          stock: marketFilter,
+        },
+        orderBy: [{ consecutiveUpDays: "desc" }, { change60d: "desc" }],
+        take: limit,
+        select: rowSelect,
+      }),
+      prisma.investorRankingDaily.findMany({
+        where: {
+          tradeDate,
+          investorType,
+          consecutiveDownDays: { gte: minStreak },
+          stock: marketFilter,
+        },
+        orderBy: [{ consecutiveDownDays: "desc" }, { change60d: "asc" }],
+        take: limit,
+        select: rowSelect,
+      }),
+    ]);
+
+    const toEntry = (
+      row: (typeof inflowRows)[0],
+      streakDays: number,
+    ): InvestorStreakEntry => ({
+      code: row.stock.code,
+      name: row.stock.name,
+      market: row.stock.market,
+      currentValue: toNumber(row.stock.investorTrading[0]?.netValue),
+      change1d: toNumber(row.change1d),
+      change5d: toNumber(row.change5d),
+      change20d: toNumber(row.change20d),
+      change60d: toNumber(row.change60d),
+      streakDays,
+      lastTradeDate: tradeDate,
+    });
+
+    return {
+      inflow: inflowRows.map((r) => toEntry(r, r.consecutiveUpDays)),
+      outflow: outflowRows.map((r) => toEntry(r, r.consecutiveDownDays)),
+      tradeDate,
+    };
+  } catch (error) {
+    console.error("[investor-ranking-service] getInvestorConsecutiveStreakTops", error);
+    return { inflow: [], outflow: [], tradeDate };
+  }
+}

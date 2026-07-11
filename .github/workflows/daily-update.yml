@@ -172,7 +172,9 @@ jobs:
           PY
 
       - name: Compute percentiles and TOP10 snapshots
-        run: python scripts/compute_snapshots.py
+        run: |
+          python scripts/compute_snapshots.py
+          python scripts/compute_investor_snapshots.py
 
   dart-overview:
     needs: finalize

@@ -29,6 +29,16 @@ export function formatMarketCap(krw: number): string {
   return `${Math.round(krw / 10_000).toLocaleString("ko-KR")}만`;
 }
 
+/** 순매수거래대금 (원) — 억/조 표시 */
+export function formatNetValue(krw: number): string {
+  if (krw === 0) return "0";
+  const sign = krw > 0 ? "+" : "-";
+  const abs = Math.abs(krw);
+  if (abs >= 1_0000_0000_0000) return `${sign}${(abs / 1_0000_0000_0000).toFixed(2)}조`;
+  if (abs >= 100_000_000) return `${sign}${Math.round(abs / 100_000_000).toLocaleString("ko-KR")}억`;
+  return `${sign}${Math.round(abs / 10_000).toLocaleString("ko-KR")}만`;
+}
+
 export function formatPrice(value: number): string {
   return value.toLocaleString("ko-KR");
 }
