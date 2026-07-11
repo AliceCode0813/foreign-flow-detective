@@ -331,6 +331,12 @@ def main() -> int:
         action="store_true",
         help="전체 테이블 UPSERT (느림)",
     )
+    parser.add_argument(
+        "--tables",
+        type=str,
+        default="",
+        help="쉼표로 구분한 테이블만 동기화 (예: investor_trading_daily,investor_rankings_daily)",
+    )
     args = parser.parse_args()
 
     env = read_env()
@@ -342,9 +348,13 @@ def main() -> int:
     src = connect(local_url)
     dst = connect(remote_url)
 
+    table_filter = {
+        t.strip() for t in args.tables.split(",") if t.strip()
+    } if args.tables else None
+
     codes: list[str] | None = None
     repair_tables: set[str] | None = None
-    if args.only_new_stocks and not args.full:
+    if args.only_new_stocks and not args.full and not table_filter:
         with src.cursor() as cur:
             cur.execute("SELECT MAX(trade_date) FROM foreign_ownership_daily")
             latest = cur.fetchone()[0]
@@ -364,9 +374,11 @@ def main() -> int:
     total = 0
     try:
         for spec in TABLES:
+            if table_filter and spec["name"] not in table_filter:
+                continue
             if repair_tables and spec["name"] not in repair_tables:
                 continue
-            if args.only_new_stocks and not args.full and not repair_tables and spec["name"] not in {
+            if args.only_new_stocks and not args.full and not table_filter and not repair_tables and spec["name"] not in {
                 "stocks",
                 "foreign_ownership_daily",
                 "rankings_daily",
@@ -379,7 +391,7 @@ def main() -> int:
             }:
                 continue
             print(f"  {spec['name']}...", flush=True)
-            if args.full:
+            if args.full or table_filter:
                 n = upsert_table_full(src, dst, spec)
             else:
                 n = upsert_table_for_codes(src, dst, spec, codes)
