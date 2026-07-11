@@ -15,7 +15,7 @@ export async function DeferredInvestorRankingsSection({
   title: string;
   pathname: string;
 }) {
-  const rankings = await getAllPeriodInvestorRankings(investorType, 15, rankMarket);
+  const rankings = await getAllPeriodInvestorRankings(investorType, 10, rankMarket);
   const rankMarketLabel = marketFilterLabel(rankMarket);
 
   return (

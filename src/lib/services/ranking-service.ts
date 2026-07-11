@@ -37,6 +37,7 @@ function mapRankingRows(
     currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
     change: row[field] ?? 0,
     netPurchase: null,
+    netPurchase1d: null,
     netPurchase5d: null,
     netPurchase20d: null,
     netPurchase60d: null,
@@ -85,6 +86,7 @@ async function attachForeignNetPurchase(
       return {
         ...e,
         netPurchase: n[field],
+        netPurchase1d: n.change1d,
         netPurchase5d: n.change5d,
         netPurchase20d: n.change20d,
         netPurchase60d: n.change60d,
@@ -164,7 +166,7 @@ export async function getTop10Snapshot(
 ): Promise<PeriodTopBottom> {
   return unstable_cache(
     () => fetchTop10Snapshot(period, market),
-    ["top10-snapshot", period, market, "v3"],
+    ["top10-snapshot", period, market, "v4"],
     { revalidate: 600 },
   )();
 }
@@ -221,6 +223,7 @@ async function fetchTop10Snapshot(
       currentRatio: row.currentRatio,
       change: row.change,
       netPurchase: null,
+      netPurchase1d: null,
       netPurchase5d: null,
       netPurchase20d: null,
       netPurchase60d: null,

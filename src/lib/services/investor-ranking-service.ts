@@ -41,6 +41,7 @@ function mapInvestorRankingRows(
     market: row.stock.market,
     currentValue: toNumber(row.stock.investorTrading[0]?.netValue),
     change: toNumber(row[field]),
+    change1d: toNumber(row.change1d),
     change5d: toNumber(row.change5d),
     change20d: toNumber(row.change20d),
     change60d: toNumber(row.change60d),
@@ -90,6 +91,7 @@ async function attachInvestorPeriodNets(
       where: { tradeDate, stockCode: { in: codes }, investorType },
       select: {
         stockCode: true,
+        change1d: true,
         change5d: true,
         change20d: true,
         change60d: true,
@@ -100,6 +102,7 @@ async function attachInvestorPeriodNets(
       const row = byCode.get(e.code);
       return {
         ...e,
+        change1d: row ? toNumber(row.change1d) : e.change1d,
         change5d: row ? toNumber(row.change5d) : e.change5d,
         change20d: row ? toNumber(row.change20d) : e.change20d,
         change60d: row ? toNumber(row.change60d) : e.change60d,
@@ -225,7 +228,7 @@ export async function getInvestorTop10Snapshot(
 ): Promise<InvestorPeriodTopBottom> {
   return unstable_cache(
     () => fetchInvestorTop10Snapshot(investorType, period, market),
-    ["investor-top10-snapshot", investorType, period, market, "v3"],
+    ["investor-top10-snapshot", investorType, period, market, "v4"],
     { revalidate: 600 },
   )();
 }
@@ -292,6 +295,7 @@ async function fetchInvestorTop10Snapshot(
       market: row.stock.market,
       currentValue: toNumber(row.currentValue),
       change: toNumber(row.change),
+      change1d: 0,
       change5d: 0,
       change20d: 0,
       change60d: 0,
@@ -345,7 +349,7 @@ export async function getAllPeriodInvestorRankings(
 ) {
   return unstable_cache(
     () => fetchAllPeriodInvestorRankings(investorType, limit, market),
-    ["all-period-investor-rankings", investorType, String(limit), market, "v3"],
+    ["all-period-investor-rankings", investorType, String(limit), market, "v4"],
     { revalidate: 600 },
   )();
 }

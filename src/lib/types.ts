@@ -147,7 +147,8 @@ export interface RankingEntry {
   change: number;
   /** 선택 기간 외국인 누적 순매수 (원), 없으면 null */
   netPurchase: number | null;
-  /** 5/20/60일 외국인 누적 순매수 (원) */
+  /** 1/5/20/60일 외국인 누적 순매수 (원) */
+  netPurchase1d: number | null;
   netPurchase5d: number | null;
   netPurchase20d: number | null;
   netPurchase60d: number | null;
@@ -164,6 +165,7 @@ export interface InvestorRankingEntry {
   currentValue: number;
   /** 선택 기간 누적 순매수 (원) */
   change: number;
+  change1d: number;
   change5d: number;
   change20d: number;
   change60d: number;

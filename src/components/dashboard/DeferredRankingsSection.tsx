@@ -9,7 +9,7 @@ export async function DeferredRankingsSection({
 }: {
   rankMarket: MarketFilter;
 }) {
-  const rankings = await getAllPeriodRankings(15, rankMarket);
+  const rankings = await getAllPeriodRankings(10, rankMarket);
   const rankMarketLabel = marketFilterLabel(rankMarket);
 
   return (
