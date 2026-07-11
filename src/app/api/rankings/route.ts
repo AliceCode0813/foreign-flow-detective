@@ -3,7 +3,7 @@ import { parseMarketFilter } from "@/lib/market";
 import { getRankings } from "@/lib/services/ranking-service";
 import type { RankingPeriod } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 const VALID_PERIODS: RankingPeriod[] = ["1d", "5d", "20d", "60d"];
 

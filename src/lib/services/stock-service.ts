@@ -368,20 +368,19 @@ export const getStockDetail = cache(async (code: string): Promise<StockDetail | 
     }));
 
     const latest = sorted[sorted.length - 1];
-    const ranking = await prisma.rankingDaily.findUnique({
-      where: {
-        stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
-      },
-      select: {
-        change1d: true,
-        change5d: true,
-        change20d: true,
-        change60d: true,
-        foreignRatioPercentile: true,
-      },
-    });
-
-    const [fundamental, marketRow] = await Promise.all([
+    const [ranking, fundamental, marketRow] = await Promise.all([
+      prisma.rankingDaily.findUnique({
+        where: {
+          stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
+        },
+        select: {
+          change1d: true,
+          change5d: true,
+          change20d: true,
+          change60d: true,
+          foreignRatioPercentile: true,
+        },
+      }),
       prisma.stockFundamentalDaily.findUnique({
         where: {
           stockCode_tradeDate: { stockCode: code, tradeDate: latest.tradeDate },
@@ -430,35 +429,51 @@ export async function getStockHistory(
   ownership: OwnershipHistoryPoint[];
   market: MarketHistoryPoint[];
 }> {
+  const daysKey = days === "all" ? "all" : String(days);
+  return unstable_cache(
+    () => fetchStockHistory(code, days),
+    ["stock-history-v1", code, daysKey],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchStockHistory(
+  code: string,
+  days: number | "all",
+): Promise<{
+  ownership: OwnershipHistoryPoint[];
+  market: MarketHistoryPoint[];
+}> {
   return safeQuery(
     async () => {
       const take = days === "all" ? undefined : days;
-      const ownership = await prisma.foreignOwnershipDaily.findMany({
-        where: { stockCode: code },
-        orderBy: { tradeDate: "desc" },
-        ...(take ? { take } : {}),
-        select: {
-          tradeDate: true,
-          foreignRatioPct: true,
-          foreignShares: true,
-          listedShares: true,
-        },
-      });
-
-      const market = await prisma.stockMarketDaily.findMany({
-        where: { stockCode: code },
-        orderBy: { tradeDate: "desc" },
-        ...(take ? { take } : {}),
-        select: {
-          tradeDate: true,
-          openPrice: true,
-          highPrice: true,
-          lowPrice: true,
-          closePrice: true,
-          volume: true,
-          changePct: true,
-        },
-      });
+      const [ownership, market] = await Promise.all([
+        prisma.foreignOwnershipDaily.findMany({
+          where: { stockCode: code },
+          orderBy: { tradeDate: "desc" },
+          ...(take ? { take } : {}),
+          select: {
+            tradeDate: true,
+            foreignRatioPct: true,
+            foreignShares: true,
+            listedShares: true,
+          },
+        }),
+        prisma.stockMarketDaily.findMany({
+          where: { stockCode: code },
+          orderBy: { tradeDate: "desc" },
+          ...(take ? { take } : {}),
+          select: {
+            tradeDate: true,
+            openPrice: true,
+            highPrice: true,
+            lowPrice: true,
+            closePrice: true,
+            volume: true,
+            changePct: true,
+          },
+        }),
+      ]);
 
       return {
         ownership: ownership.reverse().map((r) => ({
@@ -483,6 +498,16 @@ export async function getStockHistory(
 }
 
 export async function getStockInvestmentInfo(
+  code: string,
+): Promise<StockInvestmentInfo | null> {
+  return unstable_cache(
+    () => fetchStockInvestmentInfo(code),
+    ["stock-investment-v1", code],
+    { revalidate: 300 },
+  )();
+}
+
+async function fetchStockInvestmentInfo(
   code: string,
 ): Promise<StockInvestmentInfo | null> {
   return safeQuery(async () => {
@@ -657,15 +682,32 @@ async function fetchDashboardStats(market: MarketFilter): Promise<DashboardStats
   );
 }
 
+/** 홈/탐색 첫 페인트용 — avg 집계 없이 메타만 */
 export async function getMinimalDashboardMeta(): Promise<{
   hasData: boolean;
   lastUpdated: string;
   trackedCount: number;
 }> {
-  const stats = await getDashboardStats("ALL");
-  return {
-    hasData: stats.hasData,
-    lastUpdated: stats.lastUpdated,
-    trackedCount: stats.trackedCount,
-  };
+  return unstable_cache(
+    async () => {
+      const latestTradeDate = await getLatestTradeDate();
+      if (!latestTradeDate) {
+        return {
+          hasData: false,
+          lastUpdated: "데이터 없음 — ingest 실행",
+          trackedCount: 0,
+        };
+      }
+      const trackedCount = await prisma.rankingDaily.count({
+        where: { tradeDate: latestTradeDate },
+      });
+      return {
+        hasData: trackedCount > 0,
+        lastUpdated: latestTradeDate,
+        trackedCount,
+      };
+    },
+    ["minimal-dashboard-meta-v1"],
+    { revalidate: 300 },
+  )();
 }

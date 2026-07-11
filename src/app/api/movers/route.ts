@@ -3,7 +3,7 @@ import { parseMarketFilter } from "@/lib/market";
 import { getOwnershipMovers } from "@/lib/services/mover-service";
 import { getLatestTradeDate } from "@/lib/services/stock-service";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 export const maxDuration = 60;
 
 /** GET /api/movers?market=KOSPI|KOSDAQ|ALL&limit=500&sparklineTop=80 */

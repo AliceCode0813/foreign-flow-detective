@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { inferOwnershipChange } from "@/lib/inference";
 import { marketWhereClause } from "@/lib/market";
@@ -169,16 +170,68 @@ export async function getOwnershipMovers(
   market: MarketFilter = "ALL",
   options: GetOwnershipMoversOptions = {},
 ): Promise<OwnershipMoverRow[]> {
+  const sparklineTop = options.sparklineTop ?? DEFAULT_SPARKLINE_TOP;
+  const limit = options.limit && options.limit > 0 ? options.limit : 0;
+  return unstable_cache(
+    () => fetchOwnershipMovers(market, { sparklineTop, limit: limit || undefined }),
+    ["ownership-movers-v3", market, String(sparklineTop), String(limit)],
+    { revalidate: 300 },
+  )();
+}
+
+/** limit 있을 때 ABS(change_60d) TOP-N + 일간 급변 후보만 조회 (전체 rankings 스캔 회피) */
+async function resolveMoverCodes(
+  tradeDate: string,
+  market: MarketFilter,
+  limit: number | undefined,
+): Promise<string[] | null> {
+  if (!limit || limit <= 0) return null;
+
+  const marketClause =
+    market === "ALL" ? Prisma.empty : Prisma.sql`AND s.market = ${market}`;
+  const dailyLimit = Math.min(40, limit);
+
+  const [by60d, by1d] = await Promise.all([
+    prisma.$queryRaw<{ stock_code: string }[]>`
+      SELECT r.stock_code
+      FROM rankings_daily r
+      INNER JOIN stocks s ON s.code = r.stock_code
+      WHERE r.trade_date = ${tradeDate}
+      ${marketClause}
+      ORDER BY ABS(r.change_60d) DESC
+      LIMIT ${limit}
+    `,
+    prisma.$queryRaw<{ stock_code: string }[]>`
+      SELECT r.stock_code
+      FROM rankings_daily r
+      INNER JOIN stocks s ON s.code = r.stock_code
+      WHERE r.trade_date = ${tradeDate}
+      ${marketClause}
+      ORDER BY ABS(r.change_1d) DESC
+      LIMIT ${dailyLimit}
+    `,
+  ]);
+
+  return [...new Set([...by60d, ...by1d].map((r) => r.stock_code))];
+}
+
+async function fetchOwnershipMovers(
+  market: MarketFilter,
+  options: GetOwnershipMoversOptions,
+): Promise<OwnershipMoverRow[]> {
   const tradeDate = await getLatestTradeDate();
   if (!tradeDate) return [];
 
   const sparklineTop = options.sparklineTop ?? DEFAULT_SPARKLINE_TOP;
 
   try {
+    const limitedCodes = await resolveMoverCodes(tradeDate, market, options.limit);
+
     const rankings = await prisma.rankingDaily.findMany({
       where: {
         tradeDate,
         stock: marketWhereClause(market),
+        ...(limitedCodes ? { stockCode: { in: limitedCodes } } : {}),
       },
       select: {
         stockCode: true,
@@ -197,7 +250,7 @@ export async function getOwnershipMovers(
 
     const codes = rankings.map((r) => r.stockCode);
 
-    const [latestOwnership, latestMarket] = await Promise.all([
+    const [latestOwnership, latestMarket, prevDateRows, prevMarketRows] = await Promise.all([
       prisma.foreignOwnershipDaily.findMany({
         where: { stockCode: { in: codes }, tradeDate },
         select: {
@@ -212,27 +265,25 @@ export async function getOwnershipMovers(
         where: { stockCode: { in: codes }, tradeDate },
         select: { stockCode: true, tradeDate: true, closePrice: true, volume: true },
       }),
+      prisma.foreignOwnershipDaily.findMany({
+        where: { stockCode: { in: codes }, tradeDate: { lt: tradeDate } },
+        orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+        distinct: ["stockCode"],
+        select: {
+          stockCode: true,
+          tradeDate: true,
+          foreignRatioPct: true,
+          foreignShares: true,
+          listedShares: true,
+        },
+      }),
+      prisma.stockMarketDaily.findMany({
+        where: { stockCode: { in: codes }, tradeDate: { lt: tradeDate } },
+        orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
+        distinct: ["stockCode"],
+        select: { stockCode: true, tradeDate: true, closePrice: true, volume: true },
+      }),
     ]);
-
-    const prevDateRows = await prisma.foreignOwnershipDaily.findMany({
-      where: { stockCode: { in: codes }, tradeDate: { lt: tradeDate } },
-      orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
-      distinct: ["stockCode"],
-      select: {
-        stockCode: true,
-        tradeDate: true,
-        foreignRatioPct: true,
-        foreignShares: true,
-        listedShares: true,
-      },
-    });
-
-    const prevMarketRows = await prisma.stockMarketDaily.findMany({
-      where: { stockCode: { in: codes }, tradeDate: { lt: tradeDate } },
-      orderBy: [{ stockCode: "asc" }, { tradeDate: "desc" }],
-      distinct: ["stockCode"],
-      select: { stockCode: true, tradeDate: true, closePrice: true, volume: true },
-    });
 
     const ownLatestMap = new Map(latestOwnership.map((r) => [r.stockCode, r]));
     const mktLatestMap = new Map(latestMarket.map((r) => [r.stockCode, r]));
@@ -320,7 +371,7 @@ export async function getDailyVolatilityTop(
   market: MarketFilter = "ALL",
   limit = 10,
 ): Promise<OwnershipMoverRow[]> {
-  const movers = await getOwnershipMovers(market, { sparklineTop: limit, limit: 500 });
+  const movers = await getOwnershipMovers(market, { sparklineTop: limit, limit: 120 });
   return movers
     .filter((m) => m.absChange1d > 0)
     .sort((a, b) => b.absChange1d - a.absChange1d)

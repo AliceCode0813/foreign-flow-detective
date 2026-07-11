@@ -84,13 +84,22 @@ async function queryInvestorRankings(
   });
 }
 
-async function getLatestInvestorTradeDate(): Promise<string | null> {
-  const row = await prisma.investorRankingDaily.findFirst({
-    orderBy: { tradeDate: "desc" },
-    select: { tradeDate: true },
-  });
-  return row?.tradeDate ?? null;
-}
+const getLatestInvestorTradeDate = unstable_cache(
+  async (): Promise<string | null> => {
+    try {
+      const row = await prisma.investorRankingDaily.findFirst({
+        orderBy: { tradeDate: "desc" },
+        select: { tradeDate: true },
+      });
+      return row?.tradeDate ?? null;
+    } catch (error) {
+      console.error("[investor-ranking-service] getLatestInvestorTradeDate", error);
+      return null;
+    }
+  },
+  ["latest-investor-trade-date-v1"],
+  { revalidate: 300 },
+);
 
 export async function getMinimalInvestorDashboardMeta(
   investorType: InvestorType,
@@ -99,18 +108,24 @@ export async function getMinimalInvestorDashboardMeta(
   lastUpdated: string;
   trackedCount: number;
 }> {
-  const latestDate = await getLatestInvestorTradeDate();
-  if (!latestDate) {
-    return { hasData: false, lastUpdated: "데이터 없음", trackedCount: 0 };
-  }
-  const trackedCount = await prisma.investorRankingDaily.count({
-    where: { tradeDate: latestDate, investorType },
-  });
-  return {
-    hasData: trackedCount > 0,
-    lastUpdated: latestDate,
-    trackedCount,
-  };
+  return unstable_cache(
+    async () => {
+      const latestDate = await getLatestInvestorTradeDate();
+      if (!latestDate) {
+        return { hasData: false, lastUpdated: "데이터 없음", trackedCount: 0 };
+      }
+      const trackedCount = await prisma.investorRankingDaily.count({
+        where: { tradeDate: latestDate, investorType },
+      });
+      return {
+        hasData: trackedCount > 0,
+        lastUpdated: latestDate,
+        trackedCount,
+      };
+    },
+    ["minimal-investor-dashboard-meta-v1", investorType],
+    { revalidate: 300 },
+  )();
 }
 
 async function fetchTopBottomForDate(

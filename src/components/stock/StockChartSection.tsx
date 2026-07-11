@@ -1,8 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { ChartBox } from "@/components/ui/ChartBox";
 import { CandlestickChart, normalizeOhlcBar } from "@/components/stock/CandlestickChart";
@@ -15,6 +15,20 @@ import {
   formatRatio,
   formatVolume,
 } from "@/lib/utils";
+
+const CombinedRatioPriceChart = dynamic(
+  () =>
+    import("@/components/stock/CombinedRatioPriceChart").then((m) => m.CombinedRatioPriceChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center text-sm text-slate-500">
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        차트 로딩…
+      </div>
+    ),
+  },
+);
 
 type ChartMode = "candle" | "combined";
 type TableMode = "ownership" | "market" | "combined";
@@ -279,49 +293,7 @@ export function StockChartSection({
         {effectiveChart === "candle" ? (
           <CandlestickChart data={candleData} />
         ) : (
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} debounce={50}>
-            <ComposedChart
-              data={combinedChartData}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
-              <YAxis yAxisId="ratio" tickFormatter={(v) => `${v}%`} width={48} />
-              <YAxis
-                yAxisId="price"
-                orientation="right"
-                tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
-                width={44}
-              />
-              <Tooltip
-                formatter={(value, name) => {
-                  const v = Number(value);
-                  if (name === "ratio") return [formatRatio(v), "외국인 지분"];
-                  if (name === "close") return [formatPrice(v), "종가"];
-                  return [value, name];
-                }}
-              />
-              <Line
-                yAxisId="ratio"
-                type="monotone"
-                dataKey="ratio"
-                stroke="#2563eb"
-                strokeWidth={2}
-                dot={false}
-                name="ratio"
-              />
-              <Line
-                yAxisId="price"
-                type="monotone"
-                dataKey="close"
-                stroke="#f59e0b"
-                strokeWidth={1.5}
-                dot={false}
-                name="close"
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <CombinedRatioPriceChart data={combinedChartData} />
         )}
       </ChartBox>
 

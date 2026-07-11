@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseMarketFilter } from "@/lib/market";
 import { getDashboardStats, listStocks } from "@/lib/services/stock-service";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 /** GET /api/stocks?market=KOSPI|KOSDAQ|ALL&limit=500 */
 export async function GET(request: NextRequest) {

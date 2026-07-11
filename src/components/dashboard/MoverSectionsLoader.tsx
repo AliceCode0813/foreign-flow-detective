@@ -1,16 +1,25 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { DailyVolatilityPanel } from "@/components/dashboard/DailyVolatilityPanel";
 import { OwnershipMoversExplorer } from "@/components/dashboard/OwnershipMoversExplorer";
-import { CorrelationScatter } from "@/components/dashboard/CorrelationScatter";
 import { SectorHeatmap } from "@/components/dashboard/SectorHeatmap";
 import {
   buildCorrelationPoints,
   buildSectorHeatmap,
 } from "@/lib/mover-sort";
 import type { MarketFilter, OwnershipMoverRow } from "@/lib/types";
+
+const CorrelationScatter = dynamic(
+  () =>
+    import("@/components/dashboard/CorrelationScatter").then((m) => m.CorrelationScatter),
+  {
+    ssr: false,
+    loading: () => <SectionSkeleton rows={5} />,
+  },
+);
 
 function SectionSkeleton({ rows = 3 }: { rows?: number }) {
   return (
@@ -25,7 +34,7 @@ function SectionSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-/** 무거운 지분 변동 패널 — 클라이언트에서 /api/movers 로 지연 로드 */
+/** 무거운 지분 변동 패널 — TOP-N 먼저, 클라이언트에서 /api/movers 로 지연 로드 */
 export function MoverSectionsLoader({
   market,
   marketLabel,
@@ -43,7 +52,8 @@ export function MoverSectionsLoader({
     setLoading(true);
     setError(null);
 
-    fetch(`/api/movers?market=${market}&sparklineTop=80&limit=500`)
+    // TOP-N first (cached server-side); enough for panels + explorer without full-universe scan
+    fetch(`/api/movers?market=${market}&sparklineTop=40&limit=200`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();

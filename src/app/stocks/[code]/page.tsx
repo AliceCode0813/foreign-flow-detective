@@ -7,7 +7,6 @@ import { StockChartSection } from "@/components/stock/StockChartSection";
 import { StockInvestmentPanel } from "@/components/stock/StockInvestmentPanel";
 import { StockOverviewPanel } from "@/components/stock/StockOverviewPanel";
 import { FavoriteButton } from "@/components/stock/FavoriteButton";
-import { prisma } from "@/lib/db";
 import {
   buildCombinedHistory,
   buildPeriodChanges,
@@ -33,10 +32,7 @@ export const revalidate = 300;
 
 export async function generateMetadata({ params }: StockDetailPageProps) {
   const { code } = await params;
-  const stock = await prisma.stock.findUnique({
-    where: { code },
-    select: { name: true, code: true },
-  });
+  const stock = await getStockDetail(code);
   if (!stock) return { title: "종목 없음" };
   return {
     title: `${stock.name} (${stock.code}) | Foreign Flow Detective`,

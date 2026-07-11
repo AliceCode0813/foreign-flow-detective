@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseMarketFilter } from "@/lib/market";
 import { getConsecutiveStreakTops } from "@/lib/services/mover-service";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 /** GET /api/movers/consecutive?market=ALL&limit=10 — 연속 유입·유출 TOP N (DB precomputed) */
 export async function GET(request: NextRequest) {
