@@ -15,7 +15,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { marketFilterLabel, parseMarketFilter } from "@/lib/market";
 import { getTop10Snapshot } from "@/lib/services/ranking-service";
 import { getMinimalDashboardMeta } from "@/lib/services/stock-service";
-import { getWatchlistStocks } from "@/lib/services/watchlist-service";
 import { Suspense } from "react";
 
 export const revalidate = 300;
@@ -34,10 +33,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const rankMarket = parseMarketFilter(params.rankMarket);
   const streakMarket = parseMarketFilter(params.streakMarket);
 
-  const [meta, top10, watchlist] = await Promise.all([
+  const [meta, top10] = await Promise.all([
     getMinimalDashboardMeta(),
     getTop10Snapshot("60d", rankMarket),
-    getWatchlistStocks(),
   ]);
 
   const marketLabel = marketFilterLabel(market);
@@ -69,7 +67,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       ) : (
         <>
           <section className="mb-8">
-            <WatchlistSection stocks={watchlist} />
+            <WatchlistSection />
           </section>
 
           <section className="mb-8">

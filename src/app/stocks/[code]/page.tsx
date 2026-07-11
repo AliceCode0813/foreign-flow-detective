@@ -15,7 +15,6 @@ import {
   getStockHistory,
   getStockInvestmentInfo,
 } from "@/lib/services/stock-service";
-import { isWatchlisted } from "@/lib/services/watchlist-service";
 import {
   formatMarketCap,
   formatPercent,
@@ -47,11 +46,10 @@ export async function generateMetadata({ params }: StockDetailPageProps) {
 
 export default async function StockDetailPage({ params }: StockDetailPageProps) {
   const { code } = await params;
-  const [stock, history, investment, watchlisted] = await Promise.all([
+  const [stock, history, investment] = await Promise.all([
     getStockDetail(code),
     getStockHistory(code, 60),
     getStockInvestmentInfo(code),
-    isWatchlisted(code),
   ]);
 
   if (!stock) {
@@ -83,7 +81,7 @@ export default async function StockDetailPage({ params }: StockDetailPageProps) 
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">{stock.code}</p>
           </div>
-          <FavoriteButton code={stock.code} initialActive={watchlisted} />
+          <FavoriteButton code={stock.code} />
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-6">

@@ -135,6 +135,92 @@ export async function listStocks(
   }, []);
 }
 
+const stockSummarySelect = (latestTradeDate: string | null) => ({
+  code: true,
+  name: true,
+  market: true,
+  sector: true,
+  ownership: latestTradeDate
+    ? { where: { tradeDate: latestTradeDate }, take: 1, select: { foreignRatioPct: true } }
+    : { take: 0, select: { foreignRatioPct: true } },
+  rankings: latestTradeDate
+    ? {
+        where: { tradeDate: latestTradeDate },
+        take: 1,
+        select: {
+          change1d: true,
+          change5d: true,
+          change20d: true,
+          change60d: true,
+          foreignRatioPercentile: true,
+        },
+      }
+    : {
+        take: 0,
+        select: {
+          change1d: true,
+          change5d: true,
+          change20d: true,
+          change60d: true,
+          foreignRatioPercentile: true,
+        },
+      },
+});
+
+function mapSummaryOrEmpty(
+  s: {
+    code: string;
+    name: string;
+    market: string;
+    sector: string | null;
+    ownership: { foreignRatioPct: number }[];
+    rankings: {
+      change1d: number;
+      change5d: number;
+      change20d: number;
+      change60d: number;
+      foreignRatioPercentile: number | null;
+    }[];
+  },
+  latestTradeDate: string | null,
+): StockSummary {
+  const mapped = latestTradeDate ? mapSummary(s, latestTradeDate) : null;
+  if (mapped) return mapped;
+  const r = s.rankings[0];
+  return {
+    code: s.code,
+    name: s.name,
+    market: s.market,
+    sector: s.sector,
+    currentRatio: s.ownership[0]?.foreignRatioPct ?? 0,
+    change1d: r?.change1d ?? 0,
+    change5d: r?.change5d ?? 0,
+    change20d: r?.change20d ?? 0,
+    change60d: r?.change60d ?? 0,
+    foreignRatioPercentile: r?.foreignRatioPercentile ?? null,
+    lastTradeDate: latestTradeDate ?? "-",
+  };
+}
+
+/** 종목 코드 목록으로 요약 조회 — 즐겨찾기(브라우저)용, codes 순서 유지 */
+export async function getStocksByCodes(codes: string[]): Promise<StockSummary[]> {
+  const unique = [...new Set(codes.filter((c) => /^\d{6}$/.test(c)))];
+  if (unique.length === 0) return [];
+
+  return safeQuery(async () => {
+    const latestTradeDate = await getLatestTradeDate();
+    const stocks = await prisma.stock.findMany({
+      where: { code: { in: unique } },
+      select: stockSummarySelect(latestTradeDate),
+    });
+
+    const byCode = new Map(
+      stocks.map((s) => [s.code, mapSummaryOrEmpty(s, latestTradeDate)] as const),
+    );
+    return codes.filter((c) => byCode.has(c)).map((c) => byCode.get(c)!);
+  }, []);
+}
+
 export async function searchStocks(
   query: string,
   market: MarketFilter = "ALL",

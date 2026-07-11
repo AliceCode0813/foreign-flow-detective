@@ -7,20 +7,15 @@ import { formatChange, formatRatio, changeColor } from "@/lib/utils";
 
 interface StockCardProps {
   stock: StockSummary;
-  isFavorite?: boolean;
   showFavorite?: boolean;
 }
 
-export function StockCard({
-  stock,
-  isFavorite = false,
-  showFavorite = false,
-}: StockCardProps) {
+export function StockCard({ stock, showFavorite = false }: StockCardProps) {
   return (
     <Card className="relative transition-shadow hover:shadow-md">
       {showFavorite && (
         <div className="absolute right-2 top-2 z-10">
-          <FavoriteButton code={stock.code} initialActive={isFavorite} size="sm" />
+          <FavoriteButton code={stock.code} size="sm" />
         </div>
       )}
       <Link href={`/stocks/${stock.code}`} className="group block">

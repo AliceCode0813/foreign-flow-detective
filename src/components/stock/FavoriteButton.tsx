@@ -1,56 +1,37 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  isWatchlisted,
+  toggleWatchlistCode,
+  WATCHLIST_CHANGE_EVENT,
+} from "@/lib/watchlist-client";
 
 interface FavoriteButtonProps {
   code: string;
-  initialActive: boolean;
   size?: "sm" | "md";
   className?: string;
 }
 
-/** 즐겨찾기 토글 버튼 */
-export function FavoriteButton({
-  code,
-  initialActive,
-  size = "md",
-  className,
-}: FavoriteButtonProps) {
-  const router = useRouter();
-  const [active, setActive] = useState(initialActive);
-  const [loading, setLoading] = useState(false);
+/** 즐겨찾기 토글 — 브라우저 localStorage */
+export function FavoriteButton({ code, size = "md", className }: FavoriteButtonProps) {
+  const [active, setActive] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  async function toggle(e: React.MouseEvent) {
+  useEffect(() => {
+    setActive(isWatchlisted(code));
+    setMounted(true);
+    const sync = () => setActive(isWatchlisted(code));
+    window.addEventListener(WATCHLIST_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(WATCHLIST_CHANGE_EVENT, sync);
+  }, [code]);
+
+  function toggle(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (loading) return;
-
-    setLoading(true);
-    const next = !active;
-
-    try {
-      if (next) {
-        const res = await fetch("/api/watchlist", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code }),
-        });
-        if (!res.ok) {
-          const data = (await res.json()) as { error?: string };
-          alert(data.error ?? "즐겨찾기 추가 실패");
-          return;
-        }
-      } else {
-        await fetch(`/api/watchlist/${code}`, { method: "DELETE" });
-      }
-      setActive(next);
-      router.refresh();
-    } finally {
-      setLoading(false);
-    }
+    setActive(toggleWatchlistCode(code));
   }
 
   const iconSize = size === "sm" ? "h-4 w-4" : "h-5 w-5";
@@ -59,11 +40,10 @@ export function FavoriteButton({
     <button
       type="button"
       onClick={toggle}
-      disabled={loading}
       aria-label={active ? "즐겨찾기 해제" : "즐겨찾기 추가"}
       className={cn(
         "rounded-full p-1.5 transition-colors hover:bg-amber-50 dark:hover:bg-amber-950/40",
-        loading && "opacity-50",
+        !mounted && "opacity-0",
         className,
       )}
     >
