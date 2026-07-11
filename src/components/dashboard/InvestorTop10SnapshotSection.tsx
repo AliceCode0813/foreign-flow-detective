@@ -3,7 +3,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import type { InvestorRankingEntry } from "@/lib/types";
 import type { InvestorPeriodTopBottom } from "@/lib/services/investor-ranking-service";
-import { cn, changeColor, formatNetValue } from "@/lib/utils";
+import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
 
 function CompactInvestorRankingTable({
   entries,
@@ -27,6 +27,7 @@ function CompactInvestorRankingTable({
           <tr className="text-left text-xs text-slate-500">
             <th className="px-3 py-2">#</th>
             <th className="px-3 py-2">종목</th>
+            <th className="px-3 py-2 text-right">변화</th>
             <th className="px-3 py-2 text-right">누적 순매수</th>
           </tr>
         </thead>
@@ -62,6 +63,16 @@ function CompactInvestorRankingTable({
                 </p>
               </td>
               <td
+                className={cn(
+                  "px-3 py-2 text-right font-semibold",
+                  entry.ownershipChange != null
+                    ? changeColor(entry.ownershipChange)
+                    : "text-slate-400",
+                )}
+              >
+                {entry.ownershipChange != null ? formatChange(entry.ownershipChange) : "—"}
+              </td>
+              <td
                 className={cn("px-3 py-2 text-right font-semibold", changeColor(entry.change))}
               >
                 {formatNetValue(entry.change)}
@@ -90,7 +101,7 @@ export function InvestorTop10SnapshotSection({
       <CardTitle
         subtitle={
           tradeDate
-            ? `기준일 ${tradeDate} · ${marketLabel} · 60일 누적 순매수 TOP10 (사전 계산)`
+            ? `기준일 ${tradeDate} · ${marketLabel} · 60일 누적 순매수 TOP10`
             : "데이터 없음"
         }
       >

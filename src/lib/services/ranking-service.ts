@@ -31,9 +31,48 @@ function mapRankingRows(
     market: row.stock.market,
     currentRatio: row.stock.ownership[0]?.foreignRatioPct ?? 0,
     change: row[field] ?? 0,
+    netPurchase: null,
     foreignRatioPercentile: row.foreignRatioPercentile ?? null,
     tradeDate: row.tradeDate,
   }));
+}
+
+async function attachForeignNetPurchase(
+  entries: RankingEntry[],
+  period: RankingPeriod,
+  tradeDate: string,
+): Promise<RankingEntry[]> {
+  if (entries.length === 0) return entries;
+  const field = PERIOD_FIELD[period];
+  const codes = entries.map((e) => e.code);
+  try {
+    const rows = await prisma.investorRankingDaily.findMany({
+      where: {
+        tradeDate,
+        investorType: "FOREIGN",
+        stockCode: { in: codes },
+      },
+      select: {
+        stockCode: true,
+        change1d: true,
+        change5d: true,
+        change20d: true,
+        change60d: true,
+      },
+    });
+    const byCode = new Map(
+      rows.map((r) => {
+        const v = r[field];
+        return [r.stockCode, typeof v === "bigint" ? Number(v) : Number(v ?? 0)] as const;
+      }),
+    );
+    return entries.map((e) => ({
+      ...e,
+      netPurchase: byCode.has(e.code) ? byCode.get(e.code)! : null,
+    }));
+  } catch {
+    return entries;
+  }
 }
 
 async function queryRankings(
@@ -86,9 +125,14 @@ async function fetchTopBottomForDate(
     queryRankings(latestDate, period, limit, market, "asc"),
   ]);
 
+  const [top, bottom] = await Promise.all([
+    attachForeignNetPurchase(mapRankingRows(topRows, field), period, latestDate),
+    attachForeignNetPurchase(mapRankingRows(bottomRows, field), period, latestDate),
+  ]);
+
   return {
-    top: mapRankingRows(topRows, field),
-    bottom: mapRankingRows(bottomRows, field),
+    top,
+    bottom,
     tradeDate: latestDate,
   };
 }
@@ -100,8 +144,8 @@ export async function getTop10Snapshot(
 ): Promise<PeriodTopBottom> {
   return unstable_cache(
     () => fetchTop10Snapshot(period, market),
-    ["top10-snapshot", period, market],
-    { revalidate: 300 },
+    ["top10-snapshot", period, market, "v2"],
+    { revalidate: 600 },
   )();
 }
 
@@ -156,13 +200,19 @@ async function fetchTop10Snapshot(
       market: row.stock.market,
       currentRatio: row.currentRatio,
       change: row.change,
+      netPurchase: null,
       foreignRatioPercentile: row.foreignRatioPercentile,
       tradeDate: row.tradeDate,
     });
 
+    const [top, bottom] = await Promise.all([
+      attachForeignNetPurchase(topRows.map(mapRow), period, latestDate),
+      attachForeignNetPurchase(bottomRows.map(mapRow), period, latestDate),
+    ]);
+
     return {
-      top: topRows.map(mapRow),
-      bottom: bottomRows.map(mapRow),
+      top,
+      bottom,
       tradeDate: latestDate,
     };
   } catch (error) {
@@ -209,7 +259,7 @@ async function fetchAllPeriodRankings(limit: number, market: MarketFilter) {
 export async function getAllPeriodRankings(limit = 15, market: MarketFilter = "ALL") {
   return unstable_cache(
     () => fetchAllPeriodRankings(limit, market),
-    ["all-period-rankings-v3", String(limit), market],
-    { revalidate: 300 },
+    ["all-period-rankings-v4", String(limit), market],
+    { revalidate: 600 },
   )();
 }

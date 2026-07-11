@@ -3,7 +3,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import type { RankingEntry } from "@/lib/types";
 import type { PeriodTopBottom } from "@/lib/services/ranking-service";
-import { cn, formatChange, formatRatio, changeColor } from "@/lib/utils";
+import { cn, formatChange, formatNetValue, formatRatio, changeColor } from "@/lib/utils";
 
 function CompactRankingTable({
   entries,
@@ -28,6 +28,7 @@ function CompactRankingTable({
             <th className="px-3 py-2">#</th>
             <th className="px-3 py-2">종목</th>
             <th className="px-3 py-2 text-right">변화</th>
+            <th className="px-3 py-2 text-right">누적 순매수</th>
           </tr>
         </thead>
         <tbody>
@@ -58,11 +59,19 @@ function CompactRankingTable({
                   {entry.name}
                 </Link>
                 <p className="text-[10px] text-slate-400">
-                  {formatRatio(entry.currentRatio)}
+                  지분 {formatRatio(entry.currentRatio)}
                 </p>
               </td>
               <td className={cn("px-3 py-2 text-right font-semibold", changeColor(entry.change))}>
                 {formatChange(entry.change)}
+              </td>
+              <td
+                className={cn(
+                  "px-3 py-2 text-right font-semibold",
+                  entry.netPurchase != null ? changeColor(entry.netPurchase) : "text-slate-400",
+                )}
+              >
+                {entry.netPurchase != null ? formatNetValue(entry.netPurchase) : "—"}
               </td>
             </tr>
           ))}
@@ -87,7 +96,7 @@ export function Top10SnapshotSection({
       <CardTitle
         subtitle={
           tradeDate
-            ? `기준일 ${tradeDate} · ${marketLabel} · 60일 변화 TOP10 (사전 계산)`
+            ? `기준일 ${tradeDate} · ${marketLabel} · 60일 지분 변화 TOP10`
             : "데이터 없음"
         }
       >

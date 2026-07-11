@@ -172,8 +172,12 @@ jobs:
           PY
 
       - name: Compute percentiles and TOP10 snapshots
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
         run: |
           python scripts/compute_snapshots.py
+          python scripts/backfill_foreign_net.py
           python scripts/compute_investor_snapshots.py
 
   dart-overview:

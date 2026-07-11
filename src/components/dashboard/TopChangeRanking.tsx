@@ -7,7 +7,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
 import type { MarketFilter, RankingEntry, RankingPeriod } from "@/lib/types";
 import type { PeriodTopBottom } from "@/lib/services/ranking-service";
-import { cn, formatChange, formatRatio, changeColor } from "@/lib/utils";
+import { cn, formatChange, formatNetValue, formatRatio, changeColor } from "@/lib/utils";
 
 const TABS: { key: RankingPeriod; label: string }[] = [
   { key: "1d", label: "1일" },
@@ -41,13 +41,13 @@ function RankingTable({
 
   return (
     <div className="max-h-[420px] overflow-y-auto rounded-lg border border-slate-100 dark:border-slate-800">
-      <table className="w-full min-w-[280px] text-sm">
+      <table className="w-full min-w-[300px] text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
           <tr className="border-b border-slate-100 text-left text-xs text-slate-500 dark:border-slate-800">
             <th className="px-3 py-2 font-medium">#</th>
             <th className="px-3 py-2 font-medium">종목</th>
-            <th className="px-3 py-2 text-right font-medium">지분</th>
-            <th className="px-3 py-2 text-right font-medium">{periodLabel}</th>
+            <th className="px-3 py-2 text-right font-medium">{periodLabel} 변화</th>
+            <th className="px-3 py-2 text-right font-medium">누적 순매수</th>
           </tr>
         </thead>
         <tbody>
@@ -78,11 +78,8 @@ function RankingTable({
                   {entry.name}
                 </Link>
                 <p className="text-[11px] text-slate-400">
-                  {entry.code} · {entry.market}
+                  {entry.code} · 지분 {formatRatio(entry.currentRatio)}
                 </p>
-              </td>
-              <td className="px-3 py-2.5 text-right text-slate-700 dark:text-slate-300">
-                {formatRatio(entry.currentRatio)}
               </td>
               <td
                 className={cn(
@@ -91,6 +88,14 @@ function RankingTable({
                 )}
               >
                 {formatChange(entry.change)}
+              </td>
+              <td
+                className={cn(
+                  "px-3 py-2.5 text-right font-semibold",
+                  entry.netPurchase != null ? changeColor(entry.netPurchase) : "text-slate-400",
+                )}
+              >
+                {entry.netPurchase != null ? formatNetValue(entry.netPurchase) : "—"}
               </td>
             </tr>
           ))}
@@ -153,14 +158,14 @@ export function TopChangeRanking({
             <TrendingUp className="h-4 w-4" />
             증가 상위
           </h3>
-          <RankingTable entries={top} periodLabel={`${periodLabel} 변화`} variant="top" />
+          <RankingTable entries={top} periodLabel={periodLabel} variant="top" />
         </div>
         <div>
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-rose-700 dark:text-rose-300">
             <TrendingDown className="h-4 w-4" />
             감소 상위
           </h3>
-          <RankingTable entries={bottom} periodLabel={`${periodLabel} 변화`} variant="bottom" />
+          <RankingTable entries={bottom} periodLabel={periodLabel} variant="bottom" />
         </div>
       </div>
     </Card>

@@ -136,26 +136,32 @@ export interface PeriodChange {
   changePct: number;
 }
 
-/** 랭킹 항목 */
+/** 랭킹 항목 — 지분 변화 + 누적 순매수 통일 */
 export interface RankingEntry {
   rank: number;
   code: string;
   name: string;
   market: string;
   currentRatio: number;
+  /** 기간 지분 변화 (%p) */
   change: number;
+  /** 동일 기간 외국인 누적 순매수 (원), 없으면 null */
+  netPurchase: number | null;
   foreignRatioPercentile: number | null;
   tradeDate: string;
 }
 
-/** 투자자 순매수 랭킹 항목 */
+/** 투자자 순매수 랭킹 항목 — 지분 변화 + 누적 순매수 통일 */
 export interface InvestorRankingEntry {
   rank: number;
   code: string;
   name: string;
   market: string;
   currentValue: number;
+  /** 기간 누적 순매수 (원) */
   change: number;
+  /** 동일 기간 외국인 지분 변화 (%p) */
+  ownershipChange: number | null;
   tradeDate: string;
 }
 
@@ -169,6 +175,7 @@ export interface InvestorStreakEntry {
   change5d: number;
   change20d: number;
   change60d: number;
+  ownershipChange60d: number | null;
   streakDays: number;
   lastTradeDate: string;
 }

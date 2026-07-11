@@ -2,7 +2,7 @@ import Link from "next/link";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
 import type { InvestorStreakEntry } from "@/lib/types";
-import { cn, changeColor, formatNetValue } from "@/lib/utils";
+import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
 
 export function InvestorConsecutiveStreakPanel({
   entries,
@@ -55,8 +55,8 @@ export function InvestorConsecutiveStreakPanel({
                 <th className="hidden w-14 pb-1.5 pr-1 font-medium sm:table-cell">
                   60일
                 </th>
-                <th className="w-[3.25rem] pb-1.5 pr-1 text-right font-medium">누적</th>
-                <th className="w-[3rem] pb-1.5 text-right font-medium">당일</th>
+                <th className="w-[3.25rem] pb-1.5 pr-1 text-right font-medium">변화</th>
+                <th className="w-[3.5rem] pb-1.5 text-right font-medium">누적</th>
               </tr>
             </thead>
             <tbody>
@@ -96,13 +96,22 @@ export function InvestorConsecutiveStreakPanel({
                   <td
                     className={cn(
                       "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
-                      changeColor(entry.change1d),
+                      entry.ownershipChange60d != null
+                        ? changeColor(entry.ownershipChange60d)
+                        : "text-slate-400",
                     )}
                   >
-                    {formatNetValue(entry.change1d)}
+                    {entry.ownershipChange60d != null
+                      ? formatChange(entry.ownershipChange60d)
+                      : "—"}
                   </td>
-                  <td className="py-1.5 text-right text-[11px] tabular-nums text-slate-700 dark:text-slate-300">
-                    {formatNetValue(entry.currentValue)}
+                  <td
+                    className={cn(
+                      "py-1.5 text-right text-[11px] font-semibold tabular-nums",
+                      changeColor(entry.change60d),
+                    )}
+                  >
+                    {formatNetValue(entry.change60d)}
                   </td>
                 </tr>
               ))}

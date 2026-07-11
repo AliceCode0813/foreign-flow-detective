@@ -7,7 +7,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
 import type { InvestorRankingEntry, MarketFilter, RankingPeriod } from "@/lib/types";
 import type { InvestorPeriodTopBottom } from "@/lib/services/investor-ranking-service";
-import { cn, changeColor, formatNetValue } from "@/lib/utils";
+import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
 
 const TABS: { key: RankingPeriod; label: string }[] = [
   { key: "1d", label: "1일" },
@@ -43,13 +43,13 @@ function InvestorRankingTable({
 
   return (
     <div className="max-h-[420px] overflow-y-auto rounded-lg border border-slate-100 dark:border-slate-800">
-      <table className="w-full min-w-[280px] text-sm">
+      <table className="w-full min-w-[300px] text-sm">
         <thead className="sticky top-0 z-10 bg-white dark:bg-slate-900">
           <tr className="border-b border-slate-100 text-left text-xs text-slate-500 dark:border-slate-800">
             <th className="px-3 py-2 font-medium">#</th>
             <th className="px-3 py-2 font-medium">종목</th>
-            <th className="px-3 py-2 text-right font-medium">당일 순매수</th>
-            <th className="px-3 py-2 text-right font-medium">{periodLabel}</th>
+            <th className="px-3 py-2 text-right font-medium">{periodLabel} 변화</th>
+            <th className="px-3 py-2 text-right font-medium">누적 순매수</th>
           </tr>
         </thead>
         <tbody>
@@ -80,11 +80,18 @@ function InvestorRankingTable({
                   {entry.name}
                 </Link>
                 <p className="text-[11px] text-slate-400">
-                  {entry.code} · {entry.market}
+                  {entry.code} · 당일 {formatNetValue(entry.currentValue)}
                 </p>
               </td>
-              <td className="px-3 py-2.5 text-right text-slate-700 dark:text-slate-300">
-                {formatNetValue(entry.currentValue)}
+              <td
+                className={cn(
+                  "px-3 py-2.5 text-right font-semibold",
+                  entry.ownershipChange != null
+                    ? changeColor(entry.ownershipChange)
+                    : "text-slate-400",
+                )}
+              >
+                {entry.ownershipChange != null ? formatChange(entry.ownershipChange) : "—"}
               </td>
               <td
                 className={cn(
@@ -161,22 +168,14 @@ export function InvestorTopChangeRanking({
             <TrendingUp className="h-4 w-4" />
             순매수 상위
           </h3>
-          <InvestorRankingTable
-            entries={top}
-            periodLabel={`${periodLabel} 누적 순매수`}
-            variant="top"
-          />
+          <InvestorRankingTable entries={top} periodLabel={periodLabel} variant="top" />
         </div>
         <div>
           <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-rose-700 dark:text-rose-300">
             <TrendingDown className="h-4 w-4" />
             순매도 상위
           </h3>
-          <InvestorRankingTable
-            entries={bottom}
-            periodLabel={`${periodLabel} 누적 순매수`}
-            variant="bottom"
-          />
+          <InvestorRankingTable entries={bottom} periodLabel={periodLabel} variant="bottom" />
         </div>
       </div>
     </Card>

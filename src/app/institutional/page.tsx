@@ -1,6 +1,6 @@
 import { InvestorDashboard } from "@/components/dashboard/InvestorDashboard";
 
-export const revalidate = 300;
+export const revalidate = 600;
 
 interface InstitutionalPageProps {
   searchParams: Promise<{

@@ -101,7 +101,7 @@ export function ConsecutiveStreakPanel({
                   >
                     {formatChange(entry.change60d)}
                   </td>
-                  <td className="py-1.5 text-right text-[11px] tabular-nums text-slate-700 dark:text-slate-300">
+                  <td className="py-1.5 text-right text-[11px] tabular-nums text-slate-500 dark:text-slate-400">
                     {formatRatio(entry.currentRatio)}
                   </td>
                 </tr>

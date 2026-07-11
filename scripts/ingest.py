@@ -220,6 +220,7 @@ def fetch_fundamental_rows(code: str, start: str, end: str) -> list[dict[str, An
 INVESTOR_TYPE_MAP = {
     "기관합계": "INSTITUTION",
     "개인": "INDIVIDUAL",
+    "외국인합계": "FOREIGN",
 }
 
 

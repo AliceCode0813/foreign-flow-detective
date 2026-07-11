@@ -41,8 +41,38 @@ function mapInvestorRankingRows(
     market: row.stock.market,
     currentValue: toNumber(row.stock.investorTrading[0]?.netValue),
     change: toNumber(row[field]),
+    ownershipChange: null,
     tradeDate: row.tradeDate,
   }));
+}
+
+async function attachOwnershipChange(
+  entries: InvestorRankingEntry[],
+  period: RankingPeriod,
+  tradeDate: string,
+): Promise<InvestorRankingEntry[]> {
+  if (entries.length === 0) return entries;
+  const field = PERIOD_FIELD[period];
+  const codes = entries.map((e) => e.code);
+  try {
+    const rows = await prisma.rankingDaily.findMany({
+      where: { tradeDate, stockCode: { in: codes } },
+      select: {
+        stockCode: true,
+        change1d: true,
+        change5d: true,
+        change20d: true,
+        change60d: true,
+      },
+    });
+    const byCode = new Map(rows.map((r) => [r.stockCode, r[field] ?? 0] as const));
+    return entries.map((e) => ({
+      ...e,
+      ownershipChange: byCode.has(e.code) ? byCode.get(e.code)! : null,
+    }));
+  } catch {
+    return entries;
+  }
 }
 
 async function queryInvestorRankings(
@@ -141,9 +171,14 @@ async function fetchTopBottomForDate(
     queryInvestorRankings(latestDate, investorType, period, limit, market, "asc"),
   ]);
 
+  const [top, bottom] = await Promise.all([
+    attachOwnershipChange(mapInvestorRankingRows(topRows, field), period, latestDate),
+    attachOwnershipChange(mapInvestorRankingRows(bottomRows, field), period, latestDate),
+  ]);
+
   return {
-    top: mapInvestorRankingRows(topRows, field),
-    bottom: mapInvestorRankingRows(bottomRows, field),
+    top,
+    bottom,
     tradeDate: latestDate,
   };
 }
@@ -155,8 +190,8 @@ export async function getInvestorTop10Snapshot(
 ): Promise<InvestorPeriodTopBottom> {
   return unstable_cache(
     () => fetchInvestorTop10Snapshot(investorType, period, market),
-    ["investor-top10-snapshot", investorType, period, market],
-    { revalidate: 300 },
+    ["investor-top10-snapshot", investorType, period, market, "v2"],
+    { revalidate: 600 },
   )();
 }
 
@@ -222,12 +257,18 @@ async function fetchInvestorTop10Snapshot(
       market: row.stock.market,
       currentValue: toNumber(row.currentValue),
       change: toNumber(row.change),
+      ownershipChange: null,
       tradeDate: row.tradeDate,
     });
 
+    const [top, bottom] = await Promise.all([
+      attachOwnershipChange(topRows.map(mapRow), period, latestDate),
+      attachOwnershipChange(bottomRows.map(mapRow), period, latestDate),
+    ]);
+
     return {
-      top: topRows.map(mapRow),
-      bottom: bottomRows.map(mapRow),
+      top,
+      bottom,
       tradeDate: latestDate,
     };
   } catch (error) {
@@ -264,8 +305,8 @@ export async function getAllPeriodInvestorRankings(
 ) {
   return unstable_cache(
     () => fetchAllPeriodInvestorRankings(investorType, limit, market),
-    ["all-period-investor-rankings", investorType, String(limit), market],
-    { revalidate: 300 },
+    ["all-period-investor-rankings", investorType, String(limit), market, "v2"],
+    { revalidate: 600 },
   )();
 }
 
@@ -362,13 +403,32 @@ async function fetchInvestorConsecutiveStreakTops(
       change5d: toNumber(row.change5d),
       change20d: toNumber(row.change20d),
       change60d: toNumber(row.change60d),
+      ownershipChange60d: null,
       streakDays,
       lastTradeDate: tradeDate,
     });
 
+    const inflowBase = inflowRows.map((r) => toEntry(r, r.consecutiveUpDays));
+    const outflowBase = outflowRows.map((r) => toEntry(r, r.consecutiveDownDays));
+    const codes = [...new Set([...inflowBase, ...outflowBase].map((e) => e.code))];
+    let ownershipMap = new Map<string, number>();
+    if (codes.length > 0) {
+      const ownRows = await prisma.rankingDaily.findMany({
+        where: { tradeDate, stockCode: { in: codes } },
+        select: { stockCode: true, change60d: true },
+      });
+      ownershipMap = new Map(ownRows.map((r) => [r.stockCode, r.change60d]));
+    }
+
+    const withOwn = (entries: InvestorStreakEntry[]) =>
+      entries.map((e) => ({
+        ...e,
+        ownershipChange60d: ownershipMap.has(e.code) ? ownershipMap.get(e.code)! : null,
+      }));
+
     return {
-      inflow: inflowRows.map((r) => toEntry(r, r.consecutiveUpDays)),
-      outflow: outflowRows.map((r) => toEntry(r, r.consecutiveDownDays)),
+      inflow: withOwn(inflowBase),
+      outflow: withOwn(outflowBase),
       tradeDate,
     };
   } catch (error) {
