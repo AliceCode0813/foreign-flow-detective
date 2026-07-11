@@ -21,16 +21,16 @@ function CompactInvestorRankingTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[450px] text-xs">
+    <div className="-mx-1 overflow-x-auto px-1">
+      <table className="w-full min-w-[280px] table-fixed text-[11px] sm:min-w-[450px] sm:text-xs">
         <thead>
-          <tr className="border-b border-slate-100 text-left text-[10px] text-slate-500 dark:border-slate-800">
+          <tr className="border-b border-slate-100 text-left text-[9px] text-slate-500 dark:border-slate-800 sm:text-[10px]">
             <th className="w-7 pb-1.5 pr-1 font-medium">#</th>
             <th className="pb-1.5 pr-1 font-medium">종목</th>
-            <th className="w-[3.25rem] pb-1.5 pr-1 text-right font-medium">변화</th>
-            <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">5일</th>
-            <th className="w-[3.4rem] pb-1.5 pr-1 text-right font-medium">20일</th>
-            <th className="w-[3.4rem] pb-1.5 text-right font-medium">60일</th>
+            <th className="w-12 pb-1.5 pr-1 text-right font-medium sm:w-[3.25rem]">변화</th>
+            <th className="w-11 pb-1.5 pr-1 text-right font-medium sm:w-[3.4rem]">5일</th>
+            <th className="w-11 pb-1.5 pr-1 text-right font-medium sm:w-[3.4rem]">20일</th>
+            <th className="w-11 pb-1.5 text-right font-medium sm:w-[3.4rem]">60일</th>
           </tr>
         </thead>
         <tbody>
@@ -66,7 +66,7 @@ function CompactInvestorRankingTable({
               </td>
               <td
                 className={cn(
-                  "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
+                  "whitespace-nowrap py-1.5 pr-1 text-right text-[10px] font-semibold tabular-nums sm:text-[11px]",
                   entry.ownershipChange != null
                     ? changeColor(entry.ownershipChange)
                     : "text-slate-400",
@@ -76,7 +76,7 @@ function CompactInvestorRankingTable({
               </td>
               <td
                 className={cn(
-                  "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
+                  "whitespace-nowrap py-1.5 pr-1 text-right text-[10px] font-semibold tabular-nums sm:text-[11px]",
                   changeColor(entry.change5d),
                 )}
               >
@@ -84,7 +84,7 @@ function CompactInvestorRankingTable({
               </td>
               <td
                 className={cn(
-                  "py-1.5 pr-1 text-right text-[11px] font-semibold tabular-nums",
+                  "whitespace-nowrap py-1.5 pr-1 text-right text-[10px] font-semibold tabular-nums sm:text-[11px]",
                   changeColor(entry.change20d),
                 )}
               >
@@ -92,7 +92,7 @@ function CompactInvestorRankingTable({
               </td>
               <td
                 className={cn(
-                  "py-1.5 text-right text-[11px] font-semibold tabular-nums",
+                  "whitespace-nowrap py-1.5 text-right text-[10px] font-semibold tabular-nums sm:text-[11px]",
                   changeColor(entry.change60d),
                 )}
               >
