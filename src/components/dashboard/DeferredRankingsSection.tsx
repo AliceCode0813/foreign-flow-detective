@@ -17,6 +17,9 @@ export async function DeferredRankingsSection({
       rankings={rankings}
       market={rankMarket}
       marketLabel={rankMarketLabel}
+      fullRankingsHref={
+        rankMarket === "ALL" ? "/rankings" : `/rankings?market=${rankMarket}`
+      }
     />
   );
 }

@@ -5,6 +5,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
+import { FullRankingsLink } from "@/components/dashboard/FullRankingsLink";
 import type { InvestorRankingEntry, MarketFilter, RankingPeriod } from "@/lib/types";
 import type { InvestorPeriodTopBottom } from "@/lib/services/investor-ranking-service";
 import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
@@ -25,6 +26,7 @@ interface InvestorTopChangeRankingProps {
   marketLabel?: string;
   title: string;
   pathname: string;
+  fullRankingsHref?: string;
 }
 
 function netForPeriod(entry: InvestorRankingEntry, period: RankingPeriod): number {
@@ -187,6 +189,7 @@ export function InvestorTopChangeRanking({
   marketLabel = "전체",
   title,
   pathname,
+  fullRankingsHref,
 }: InvestorTopChangeRankingProps) {
   const [periodView, setPeriodView] = useState<PeriodView>("5d");
   const dataPeriod: RankingPeriod = periodView === "all" ? "60d" : periodView;
@@ -208,13 +211,16 @@ export function InvestorTopChangeRanking({
       </CardTitle>
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-        <Suspense fallback={null}>
-          <MarketFilterLinks
-            current={market}
-            paramName="rankMarket"
-            pathname={pathname}
-          />
-        </Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <Suspense fallback={null}>
+            <MarketFilterLinks
+              current={market}
+              paramName="rankMarket"
+              pathname={pathname}
+            />
+          </Suspense>
+          {fullRankingsHref ? <FullRankingsLink href={fullRankingsHref} /> : null}
+        </div>
         <div className="flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
           {TABS.map((tab) => (
             <button

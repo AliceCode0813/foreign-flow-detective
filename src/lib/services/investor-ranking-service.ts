@@ -354,6 +354,19 @@ export async function getAllPeriodInvestorRankings(
   )();
 }
 
+/** 전체 순위 페이지용 — 상위/하위 대량 조회 */
+export async function getFullPeriodInvestorRankings(
+  investorType: InvestorType,
+  market: MarketFilter = "ALL",
+  limit = 500,
+) {
+  return getAllPeriodInvestorRankings(
+    investorType,
+    Math.min(Math.max(limit, 10), 1000),
+    market,
+  );
+}
+
 export async function getInvestorConsecutiveStreakTops(
   investorType: InvestorType,
   market: MarketFilter = "ALL",

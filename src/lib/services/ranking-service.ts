@@ -289,3 +289,11 @@ export async function getAllPeriodRankings(limit = 15, market: MarketFilter = "A
     { revalidate: 600 },
   )();
 }
+
+/** 전체 순위 페이지용 — 상위/하위 대량 조회 */
+export async function getFullPeriodRankings(
+  market: MarketFilter = "ALL",
+  limit = 500,
+) {
+  return getAllPeriodRankings(Math.min(Math.max(limit, 10), 1000), market);
+}

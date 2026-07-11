@@ -25,6 +25,11 @@ export async function DeferredInvestorRankingsSection({
       marketLabel={rankMarketLabel}
       title={title}
       pathname={pathname}
+      fullRankingsHref={
+        rankMarket === "ALL"
+          ? `${pathname}/rankings`
+          : `${pathname}/rankings?market=${rankMarket}`
+      }
     />
   );
 }

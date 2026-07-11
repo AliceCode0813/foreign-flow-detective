@@ -5,6 +5,7 @@ import { TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { MarketFilterLinks } from "@/components/dashboard/MarketFilterLinks";
+import { FullRankingsLink } from "@/components/dashboard/FullRankingsLink";
 import type { MarketFilter, RankingEntry, RankingPeriod } from "@/lib/types";
 import type { PeriodTopBottom } from "@/lib/services/ranking-service";
 import { cn, formatChange, formatNetValue, formatRatio, changeColor } from "@/lib/utils";
@@ -23,6 +24,7 @@ interface TopChangeRankingProps {
   rankings: Record<RankingPeriod, PeriodTopBottom>;
   market: MarketFilter;
   marketLabel?: string;
+  fullRankingsHref?: string;
 }
 
 function netForPeriod(entry: RankingEntry, period: RankingPeriod): number | null {
@@ -195,6 +197,7 @@ export function TopChangeRanking({
   rankings,
   market,
   marketLabel = "전체",
+  fullRankingsHref,
 }: TopChangeRankingProps) {
   const [periodView, setPeriodView] = useState<PeriodView>("5d");
   const dataPeriod: RankingPeriod = periodView === "all" ? "60d" : periodView;
@@ -216,9 +219,12 @@ export function TopChangeRanking({
       </CardTitle>
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-        <Suspense fallback={null}>
-          <MarketFilterLinks current={market} paramName="rankMarket" pathname="/" />
-        </Suspense>
+        <div className="flex flex-wrap items-center gap-2">
+          <Suspense fallback={null}>
+            <MarketFilterLinks current={market} paramName="rankMarket" pathname="/" />
+          </Suspense>
+          {fullRankingsHref ? <FullRankingsLink href={fullRankingsHref} /> : null}
+        </div>
         <div className="flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
           {TABS.map((tab) => (
             <button

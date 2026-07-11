@@ -82,6 +82,11 @@ export async function InvestorDashboard({
               snapshot={top10}
               marketLabel={rankMarketLabel}
               title={title}
+              fullRankingsHref={
+                rankMarket === "ALL"
+                  ? `${pathname}/rankings`
+                  : `${pathname}/rankings?market=${rankMarket}`
+              }
             />
           </section>
 

@@ -74,7 +74,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </section>
 
           <section className="mb-8">
-            <Top10SnapshotSection snapshot={top10} marketLabel={rankMarketLabel} />
+            <Top10SnapshotSection
+              snapshot={top10}
+              marketLabel={rankMarketLabel}
+              fullRankingsHref={
+                rankMarket === "ALL" ? "/rankings" : `/rankings?market=${rankMarket}`
+              }
+            />
           </section>
 
           <section className="mb-8">

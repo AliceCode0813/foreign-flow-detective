@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { FullRankingsLink } from "@/components/dashboard/FullRankingsLink";
 import type { InvestorRankingEntry, RankingPeriod } from "@/lib/types";
 import type { InvestorPeriodTopBottom } from "@/lib/services/investor-ranking-service";
 import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
@@ -174,10 +175,12 @@ export function InvestorTop10SnapshotSection({
   snapshot,
   marketLabel,
   title,
+  fullRankingsHref,
 }: {
   snapshot: InvestorPeriodTopBottom;
   marketLabel: string;
   title: string;
+  fullRankingsHref?: string;
 }) {
   const [periodView, setPeriodView] = useState<PeriodView>("60d");
   const { top, bottom, tradeDate } = snapshot;
@@ -185,19 +188,24 @@ export function InvestorTop10SnapshotSection({
   return (
     <Card>
       <div className="mb-3 flex flex-col gap-2 sm:mb-4 sm:flex-row sm:items-start sm:justify-between">
-        <CardTitle
-          className="mb-0"
-          subtitle={
-            tradeDate
-              ? `기준일 ${tradeDate} · ${marketLabel} · 60일 누적 순매수 TOP10`
-              : "데이터 없음"
-          }
-        >
-          <span className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-emerald-500" />
-            {title} TOP10
-          </span>
-        </CardTitle>
+        <div className="flex min-w-0 items-start justify-between gap-2 sm:block">
+          <CardTitle
+            className="mb-0"
+            subtitle={
+              tradeDate
+                ? `기준일 ${tradeDate} · ${marketLabel} · 60일 누적 순매수 TOP10`
+                : "데이터 없음"
+            }
+          >
+            <span className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-500" />
+              {title} TOP10
+            </span>
+          </CardTitle>
+          {fullRankingsHref ? (
+            <FullRankingsLink href={fullRankingsHref} className="sm:mt-1" />
+          ) : null}
+        </div>
         <PeriodTabs value={periodView} onChange={setPeriodView} />
       </div>
 
