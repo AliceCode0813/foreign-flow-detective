@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { AppShell } from "@/components/layout/AppShell";
+import { StockSearch } from "@/components/dashboard/StockSearch";
+import { WatchlistSection } from "@/components/dashboard/WatchlistSection";
 import { InvestorTop10SnapshotSection } from "@/components/dashboard/InvestorTop10SnapshotSection";
 import {
   DeferredInvestorRankingsFallback,
@@ -17,13 +19,14 @@ import {
 } from "@/lib/services/investor-ranking-service";
 import type { InvestorType } from "@/lib/types";
 
-export const revalidate = 300;
+export const revalidate = 600;
 
 interface InvestorDashboardProps {
   investorType: InvestorType;
   title: string;
   pathname: string;
   searchParams: Promise<{
+    market?: string;
     rankMarket?: string;
     streakMarket?: string;
   }>;
@@ -36,6 +39,7 @@ export async function InvestorDashboard({
   searchParams,
 }: InvestorDashboardProps) {
   const params = await searchParams;
+  const market = parseMarketFilter(params.market);
   const rankMarket = parseMarketFilter(params.rankMarket);
   const streakMarket = parseMarketFilter(params.streakMarket);
 
@@ -65,6 +69,14 @@ export async function InvestorDashboard({
         />
       ) : (
         <>
+          <section className="mb-8">
+            <WatchlistSection />
+          </section>
+
+          <section className="mb-8">
+            <StockSearch market={market} />
+          </section>
+
           <section className="mb-8">
             <InvestorTop10SnapshotSection
               snapshot={top10}
