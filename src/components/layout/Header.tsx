@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TrendingUp } from "lucide-react";
+import { InvestorNav } from "./InvestorNav";
 
 export function Header({ hasData = false }: { hasData?: boolean }) {
   return (
@@ -19,12 +20,7 @@ export function Header({ hasData = false }: { hasData?: boolean }) {
           </div>
         </Link>
         <nav className="flex items-center gap-4 text-sm">
-          <Link
-            href="/"
-            className="font-medium text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-          >
-            대시보드
-          </Link>
+          <InvestorNav />
           <span
             className={
               hasData
