@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { MetricTip } from "@/components/ui/MetricTip";
 import type { InvestorStreakEntry, RankingPeriod } from "@/lib/types";
 import { cn, changeColor, formatChange, formatNetValue } from "@/lib/utils";
 import type { PeriodView } from "@/components/dashboard/ConsecutiveStreakPanel";
@@ -19,19 +20,6 @@ function valueForPeriod(entry: InvestorStreakEntry, period: RankingPeriod): numb
   if (period === "5d") return entry.change5d;
   if (period === "20d") return entry.change20d;
   return entry.change60d;
-}
-
-function NetCell({ value }: { value: number }) {
-  return (
-    <td
-      className={cn(
-        "max-w-0 overflow-hidden py-1.5 pr-0.5 text-right text-[9px] font-semibold tabular-nums last:pr-0 sm:text-[10px]",
-        changeColor(value),
-      )}
-    >
-      <span className="block truncate">{formatNetValue(value)}</span>
-    </td>
-  );
 }
 
 export function InvestorConsecutiveStreakPanel({
@@ -57,9 +45,11 @@ export function InvestorConsecutiveStreakPanel({
   const emptyMsg = isInflow
     ? "3일 이상 연속 순매수 종목이 없습니다."
     : "3일 이상 연속 순매도 종목이 없습니다.";
-  const showAll = periodView === "all";
+  const showAllDesktop = periodView === "all";
   const periodLabel =
-    periodView === "all" ? "" : PERIOD_LABELS[periodView];
+    periodView === "all" ? "60일" : PERIOD_LABELS[periodView];
+  const effectivePeriod: RankingPeriod =
+    periodView === "all" ? "60d" : periodView;
 
   return (
     <Card className="p-3 sm:p-4">
@@ -80,76 +70,129 @@ export function InvestorConsecutiveStreakPanel({
       {entries.length === 0 ? (
         <p className="py-4 text-center text-xs text-slate-500">{emptyMsg}</p>
       ) : (
-        <div className="-mx-0.5 overflow-x-auto px-0.5">
-          <table className="w-full min-w-0 table-fixed text-[11px]">
+        <div className="rounded-lg border border-slate-100 dark:border-slate-800">
+          <table className="w-full table-fixed text-[11px]">
             <thead>
               <tr className="border-b border-slate-100 text-left text-[9px] text-slate-500 dark:border-slate-800">
-                <th className="w-6 pb-1.5 pr-0.5 font-medium">#</th>
-                <th className="pb-1.5 pr-0.5 font-medium">종목</th>
-                <th className="w-9 pb-1.5 pr-0.5 text-center font-medium">연속</th>
-                {showAll ? (
+                <th className="w-6 px-1 py-1.5 font-medium">#</th>
+                <th className="px-1 py-1.5 font-medium">종목</th>
+                <th className="w-9 px-1 py-1.5 text-center font-medium">연속</th>
+                {showAllDesktop ? (
                   <>
-                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">1일</th>
-                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">5일</th>
-                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">20</th>
-                    <th className="w-10 pb-1.5 pr-0.5 text-right font-medium">60</th>
+                    <th className="hidden w-10 px-0.5 py-1.5 text-right font-medium sm:table-cell">
+                      1일
+                    </th>
+                    <th className="hidden w-10 px-0.5 py-1.5 text-right font-medium sm:table-cell">
+                      5일
+                    </th>
+                    <th className="hidden w-10 px-0.5 py-1.5 text-right font-medium sm:table-cell">
+                      20
+                    </th>
+                    <th className="hidden w-10 px-0.5 py-1.5 text-right font-medium sm:table-cell">
+                      60
+                    </th>
+                    <th className="w-[28%] px-1 py-1.5 text-right font-semibold text-slate-700 dark:text-slate-200 sm:hidden">
+                      누적
+                    </th>
                   </>
                 ) : (
-                  <th className="w-14 pb-1.5 pr-0.5 text-right font-medium">{periodLabel}</th>
+                  <th className="w-[30%] px-1 py-1.5 text-right font-semibold text-slate-700 dark:text-slate-200">
+                    <MetricTip
+                      label={`${periodLabel} 누적`}
+                      tip={`개인 일별 순매수의 최근 ${periodLabel} 합계입니다.`}
+                    />
+                  </th>
                 )}
-                <th className="w-11 pb-1.5 text-right font-medium">변화</th>
+                <th className="w-12 px-1 py-1.5 text-right font-medium">
+                  <MetricTip
+                    label="지분"
+                    tip="60일 외국인 지분율 변화(%p). 개인 지분이 아닙니다."
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry, i) => (
-                <tr
-                  key={entry.code}
-                  className="border-b border-slate-50 last:border-0 dark:border-slate-800/50"
-                >
-                  <td className="py-1.5 pr-0.5 font-bold text-slate-500">{i + 1}</td>
-                  <td className="max-w-0 py-1.5 pr-0.5">
-                    <Link
-                      href={`/stocks/${entry.code}`}
-                      className="block truncate font-medium text-slate-900 hover:text-blue-700 dark:text-slate-100"
-                    >
-                      {entry.name}
-                    </Link>
-                    <p className="truncate text-[9px] text-slate-400">{entry.code}</p>
-                  </td>
-                  <td className="py-1.5 pr-0.5 text-center">
-                    <span
+              {entries.map((entry, i) => {
+                const single = valueForPeriod(entry, effectivePeriod);
+                return (
+                  <tr
+                    key={entry.code}
+                    className="border-b border-slate-50 last:border-0 dark:border-slate-800/50"
+                  >
+                    <td className="px-1 py-1.5 font-bold text-slate-500">{i + 1}</td>
+                    <td className="max-w-0 px-1 py-1.5">
+                      <Link
+                        href={`/stocks/${entry.code}`}
+                        className="line-clamp-2 font-medium leading-snug text-slate-900 hover:text-blue-700 dark:text-slate-100"
+                      >
+                        {entry.name}
+                      </Link>
+                      <p className="text-[9px] text-slate-400">
+                        당일 {formatNetValue(entry.currentValue)}
+                      </p>
+                    </td>
+                    <td className="px-1 py-1.5 text-center">
+                      <span
+                        className={cn(
+                          "inline-block rounded-full px-1 py-0.5 text-[9px] font-bold leading-none",
+                          badgeClass,
+                        )}
+                      >
+                        {entry.streakDays}일
+                      </span>
+                    </td>
+                    {showAllDesktop ? (
+                      <>
+                        {[
+                          entry.change1d,
+                          entry.change5d,
+                          entry.change20d,
+                          entry.change60d,
+                        ].map((v, idx) => (
+                          <td
+                            key={idx}
+                            className={cn(
+                              "hidden px-0.5 py-1.5 text-right text-[10px] font-bold tabular-nums sm:table-cell",
+                              changeColor(v),
+                            )}
+                          >
+                            {formatNetValue(v)}
+                          </td>
+                        ))}
+                        <td
+                          className={cn(
+                            "px-1 py-1.5 text-right text-[11px] font-bold tabular-nums sm:hidden",
+                            changeColor(entry.change60d),
+                          )}
+                        >
+                          {formatNetValue(entry.change60d)}
+                        </td>
+                      </>
+                    ) : (
+                      <td
+                        className={cn(
+                          "px-1 py-1.5 text-right text-[12px] font-bold tabular-nums",
+                          changeColor(single),
+                        )}
+                      >
+                        {formatNetValue(single)}
+                      </td>
+                    )}
+                    <td
                       className={cn(
-                        "inline-block rounded-full px-1 py-0.5 text-[9px] font-bold leading-none",
-                        badgeClass,
+                        "px-1 py-1.5 text-right text-[10px] font-medium tabular-nums",
+                        entry.ownershipChange60d != null
+                          ? changeColor(entry.ownershipChange60d)
+                          : "text-slate-400",
                       )}
                     >
-                      {entry.streakDays}일
-                    </span>
-                  </td>
-                  {showAll ? (
-                    <>
-                      <NetCell value={entry.change1d} />
-                      <NetCell value={entry.change5d} />
-                      <NetCell value={entry.change20d} />
-                      <NetCell value={entry.change60d} />
-                    </>
-                  ) : (
-                    <NetCell value={valueForPeriod(entry, periodView)} />
-                  )}
-                  <td
-                    className={cn(
-                      "whitespace-nowrap py-1.5 text-right text-[10px] font-semibold tabular-nums",
-                      entry.ownershipChange60d != null
-                        ? changeColor(entry.ownershipChange60d)
-                        : "text-slate-400",
-                    )}
-                  >
-                    {entry.ownershipChange60d != null
-                      ? formatChange(entry.ownershipChange60d)
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
+                      {entry.ownershipChange60d != null
+                        ? formatChange(entry.ownershipChange60d)
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

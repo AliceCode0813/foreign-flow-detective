@@ -196,6 +196,77 @@ export async function getMinimalInvestorDashboardMeta(
   )();
 }
 
+export interface InvestorDayFlowSummary {
+  tradeDate: string;
+  totalNet: number | null;
+  buyCount: number | null;
+  sellCount: number | null;
+  topBuy: { code: string; name: string; netValue: number } | null;
+}
+
+/** 당일 개인/기관 순매수 흐름 요약 — 실데이터만, 없으면 null 필드 */
+export async function getInvestorDayFlowSummary(
+  investorType: InvestorType,
+  market: MarketFilter = "ALL",
+): Promise<InvestorDayFlowSummary | null> {
+  return unstable_cache(
+    async () => {
+      const tradeDate = await getLatestInvestorTradeDate();
+      if (!tradeDate) return null;
+
+      const where = {
+        tradeDate,
+        investorType,
+        stock: marketWhereClause(market),
+      };
+
+      const [agg, buyCount, sellCount, topRow] = await Promise.all([
+        prisma.investorTradingDaily.aggregate({
+          where,
+          _sum: { netValue: true },
+          _count: { _all: true },
+        }),
+        prisma.investorTradingDaily.count({
+          where: { ...where, netValue: { gt: 0 } },
+        }),
+        prisma.investorTradingDaily.count({
+          where: { ...where, netValue: { lt: 0 } },
+        }),
+        prisma.investorTradingDaily.findFirst({
+          where: { ...where, netValue: { gt: 0 } },
+          orderBy: { netValue: "desc" },
+          select: {
+            stockCode: true,
+            netValue: true,
+            stock: { select: { name: true } },
+          },
+        }),
+      ]);
+
+      if (agg._count._all === 0) return null;
+
+      const totalNet =
+        agg._sum.netValue != null ? toNumber(agg._sum.netValue) : null;
+
+      return {
+        tradeDate,
+        totalNet,
+        buyCount: buyCount > 0 || sellCount > 0 ? buyCount : null,
+        sellCount: buyCount > 0 || sellCount > 0 ? sellCount : null,
+        topBuy: topRow
+          ? {
+              code: topRow.stockCode,
+              name: topRow.stock.name,
+              netValue: toNumber(topRow.netValue),
+            }
+          : null,
+      };
+    },
+    ["investor-day-flow-summary-v1", investorType, market],
+    { revalidate: 300 },
+  )();
+}
+
 async function fetchTopBottomForDate(
   latestDate: string,
   investorType: InvestorType,
